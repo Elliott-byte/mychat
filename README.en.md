@@ -194,7 +194,10 @@ Long term, the direct connection above is cleaner: one repository instead of two
 | API key storage | Cloudflare Secret (encrypted at rest), read only server-side via `env.OPENROUTER_API_KEY` |
 | Master password storage | Cloudflare Secret, never committed to the repo |
 | Session credential | HMAC-SHA256 signed cookie, `HttpOnly` + `Secure` + `SameSite=Strict`, valid 7 days |
-| Password comparison | Constant-time comparison against timing attacks; 1-second delay on failure to slow brute force |
+| Password comparison | Compares SHA-256 digests (always 32 bytes), which defeats timing attacks and stops an oversized password field from burning the CPU budget |
+| Brute force | Failures are counted in D1 and lock out after 8 attempts in 10 minutes. The counter is shared across requests, so parallel guessing is limited too |
+| CSRF | Every state-changing request checks Origin (`SameSite=Strict` is not enough when sibling Workers share your workers.dev subdomain) |
+| Content Security Policy | `img-src 'self' data:` — if a prompt injection makes the model emit a remote image URL, the browser never fetches it, closing the usual conversation-exfiltration channel |
 | Route protection | `/api/models`, `/api/chat`, and `/api/image` all verify the session and return 401 when absent |
 | Chat history | Stored in your own Cloudflare D1, readable and writable only after login, never touching a third party |
 | Search engines | Pages carry `noindex, nofollow` |
@@ -254,6 +257,7 @@ mychat/
 |---|---|---|
 | `OPENROUTER_API_KEY` | Secret | **Required.** Your OpenRouter key |
 | `MASTER_PASSWORD` | Secret | **Required.** The password you log in with |
+| `SESSION_SECRET` | Secret | Optional but **recommended**. Generate with `openssl rand -base64 32`; used to sign session cookies. Without it the signing key is derived from your master password, so a leaked cookie could be used to crack that password offline |
 | `OPENROUTER_BASE_URL` | Plain var | Optional. Defaults to `https://openrouter.ai/api/v1`; point it at a mirror or your own proxy if the default is unreachable |
 
 ---

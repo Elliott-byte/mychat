@@ -17,7 +17,11 @@ function loadPrefs() {
 }
 
 export default function App() {
-  const prefs = useRef(loadPrefs()).current;
+  // useRef(loadPrefs()) would re-read localStorage on every render and throw the
+  // result away; read it once instead.
+  const prefsRef = useRef(null);
+  if (prefsRef.current === null) prefsRef.current = loadPrefs();
+  const prefs = prefsRef.current;
   const [authed, setAuthed] = useState(null); // null = not determined yet
   const [historyEnabled, setHistoryEnabled] = useState(false);
 
@@ -48,23 +52,29 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(""), 1800);
   }, []);
 
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
   /* ---------- Startup: determine session state ---------- */
   useEffect(() => {
-    api.me().then((d) => {
-      if (d?.ok) {
-        setHistoryEnabled(Boolean(d.history));
-        setAuthed(true);
-      } else {
-        setAuthed(false);
-      }
-    });
+    api
+      .me()
+      .then((d) => {
+        if (d?.ok) {
+          setHistoryEnabled(Boolean(d.history));
+          setAuthed(true);
+        } else {
+          setAuthed(false);
+        }
+      })
+      // A failed check must land on the login screen, not a permanent "Loading…"
+      .catch(() => setAuthed(false));
   }, []);
 
   /* ---------- After login: load models and history ---------- */
-  const loadModels = useCallback(async () => {
+  const loadModels = useCallback(async ({ refresh = false } = {}) => {
     setModelStatus("Loading models…");
     try {
-      const d = await api.models();
+      const d = await api.models({ refresh });
       setAllModels({ chat: d.chat || [], image: d.image || [] });
       setModelStatus("");
     } catch (err) {
@@ -108,12 +118,17 @@ export default function App() {
   const supportsVision = Boolean(current?.input?.includes("image"));
   const supportsImageOut = Boolean(current?.output?.includes("image"));
 
-  // If the selected model is filtered out (or was never set), fall back to the
-  // first visible one. A remembered model that no longer exists lands here too.
+  // Fall back only when the model genuinely doesn't exist. Checking against the
+  // *filtered* list would mean typing in the search box, or ticking "free only",
+  // silently switches which model you're talking to.
+  const allIds = useMemo(
+    () => new Set([...(allModels.chat || []), ...(allModels.image || [])].map((m) => m.id)),
+    [allModels]
+  );
   useEffect(() => {
-    if (!visibleModels.length) return;
-    if (!visibleModels.some((m) => m.id === model)) setModel(visibleModels[0].id);
-  }, [visibleModels, model]);
+    if (!allIds.size || !visibleModels.length) return;
+    if (!allIds.has(model)) setModel(visibleModels[0].id);
+  }, [allIds, visibleModels, model]);
 
   // Persist the choices worth keeping across reloads
   useEffect(() => {
@@ -126,6 +141,7 @@ export default function App() {
 
   /* ---------- Conversation actions ---------- */
   function newChat() {
+    if (busy) return showToast("Stop the current generation first");
     setCurrentId(null);
     setMessages([]);
     setChatError(null);
@@ -160,19 +176,29 @@ export default function App() {
   }
 
   async function deleteConv(c) {
+    if (busy) return showToast("Stop the current generation first");
     if (!confirm(`Delete "${c.title}"? This cannot be undone.`)) return;
-    await api.deleteConversation(c.id);
-    setConversations((list) => list.filter((x) => x.id !== c.id));
-    if (currentId === c.id) newChat();
-    showToast("Deleted");
+    try {
+      await api.deleteConversation(c.id);
+      setConversations((list) => list.filter((x) => x.id !== c.id));
+      if (currentId === c.id) newChat();
+      showToast("Deleted");
+    } catch (err) {
+      showToast(err.message || "Could not delete that conversation");
+    }
   }
 
   async function clearAll() {
+    if (busy) return showToast("Stop the current generation first");
     if (!confirm(`Delete all ${conversations.length} conversations? This cannot be undone.`)) return;
-    await api.clearConversations();
-    setConversations([]);
-    newChat();
-    showToast("History cleared");
+    try {
+      await api.clearConversations();
+      setConversations([]);
+      newChat();
+      showToast("History cleared");
+    } catch (err) {
+      showToast(err.message || "Could not clear history");
+    }
   }
 
   /* ---------- Sending and receiving the stream ---------- */
@@ -193,7 +219,7 @@ export default function App() {
         setStreamingText(full);
       };
       try {
-        const { convId, isNew } = await api.chatStream({
+        const { convId, isNew, images } = await api.chatStream({
           model,
           messages: payload,
           conversationId: currentId,
@@ -206,7 +232,11 @@ export default function App() {
         });
         clearTimeout(flushTimer);
         if (convId) setCurrentId(convId);
-        setMessages([...payload, { role: "assistant", content: full || "(the model returned an empty response)", model }]);
+        // An image-only reply has no text; don't call that an empty response.
+        const replyContent = images?.length
+          ? [...(full ? [{ type: "text", text: full }] : []), ...images.map((url) => ({ type: "image_url", image_url: { url } }))]
+          : full || "(the model returned an empty response)";
+        setMessages([...payload, { role: "assistant", content: replyContent, model }]);
         if (isNew) loadConversations();
         else
           setConversations((list) => {
@@ -258,6 +288,7 @@ export default function App() {
 
   function regenerate(index) {
     if (busy) return showToast("Already generating");
+    if (index < 1) return; // nothing to regenerate from
     const payload = messages.slice(0, index); // drop this reply and everything after it
     setMessages(payload);
     runChat(payload);
@@ -269,10 +300,11 @@ export default function App() {
     return (
       <Login
         onSuccess={() =>
-          api.me().then((d) => {
-            setHistoryEnabled(Boolean(d?.history));
-            setAuthed(true);
-          })
+          api
+            .me()
+            .then((d) => setHistoryEnabled(Boolean(d?.history)))
+            .catch(() => {})
+            .finally(() => setAuthed(true))
         }
       />
     );
@@ -291,7 +323,7 @@ export default function App() {
         onDelete={deleteConv}
         onClearAll={clearAll}
         onRefreshModels={() => {
-          loadModels();
+          loadModels({ refresh: true });
           showToast("Refreshing models…");
         }}
         onLogout={async () => {

@@ -4,7 +4,7 @@
 // Security: everything becomes React nodes via react-markdown / lowlight — no
 // dangerouslySetInnerHTML anywhere. Model output and pasted text are untrusted,
 // so this removes the XSS surface entirely rather than trying to sanitise it.
-import { createElement, memo, useMemo, useState } from "react";
+import { createElement, memo, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createLowlight } from "lowlight";
@@ -60,13 +60,16 @@ function hastToReact(node, key) {
 
 function CopyButton({ getText }) {
   const [copied, setCopied] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
   return (
     <button
       className="copy-code"
       onClick={() => {
         navigator.clipboard.writeText(getText());
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => setCopied(false), 1500);
       }}
     >
       {copied ? "Copied" : "Copy"}
@@ -83,8 +86,12 @@ function toText(node) {
   return "";
 }
 
-function CodeBlock({ code, lang }) {
+function CodeBlock({ code, lang, streaming }) {
   const highlighted = useMemo(() => {
+    // Re-highlighting a growing block on every flush is O(n^2), and an unlabeled
+    // fence runs auto-detection across every registered language each time.
+    // Plain text while streaming; highlight once the block settles.
+    if (streaming) return code;
     const name = ALIAS[lang] || lang;
     try {
       const tree = name && lowlight.registered(name)
@@ -94,7 +101,7 @@ function CodeBlock({ code, lang }) {
     } catch {
       return code; // if highlighting fails, fall back to plain text rather than losing content
     }
-  }, [code, lang]);
+  }, [code, lang, streaming]);
 
   return (
     <div className="code-block">
@@ -109,12 +116,19 @@ function CodeBlock({ code, lang }) {
   );
 }
 
-const components = {
+function makeComponents(streaming) {
+  return {
   pre({ children }) {
     const codeEl = Array.isArray(children) ? children[0] : children;
     const className = codeEl?.props?.className || "";
     const lang = /language-([\w+#-]+)/.exec(className)?.[1];
-    return <CodeBlock code={toText(codeEl?.props?.children).replace(/\n$/, "")} lang={lang} />;
+      return (
+        <CodeBlock
+          code={toText(codeEl?.props?.children).replace(/\n$/, "")}
+          lang={lang}
+          streaming={streaming}
+        />
+      );
   },
   // External links always open in a new tab with the opener reference severed
   a({ href, children }) {
@@ -132,12 +146,19 @@ const components = {
       </div>
     );
   },
-};
+  };
+}
 
-export const Markdown = memo(function Markdown({ text }) {
+const staticComponents = makeComponents(false);
+const streamingComponents = makeComponents(true);
+
+export const Markdown = memo(function Markdown({ text, streaming }) {
   return (
     <div className="md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={streaming ? streamingComponents : staticComponents}
+      >
         {text}
       </ReactMarkdown>
     </div>

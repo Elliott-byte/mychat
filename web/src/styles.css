@@ -331,3 +331,12 @@ select {
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; font-weight: 600; color: #c7d3ff;
 }
+
+/* Hidden-but-focusable buttons are a keyboard trap; make them truly inert. */
+.msg-acts { pointer-events: none; }
+.msg:hover .msg-acts, .msg:focus-within .msg-acts { opacity: 1; pointer-events: auto; }
+
+.attachment.preparing {
+  height: 68px; width: 68px; border-radius: 8px; border: 1px dashed var(--border);
+  display: flex; align-items: center; justify-content: center; color: var(--muted);
+}

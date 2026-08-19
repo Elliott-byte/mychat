@@ -22,13 +22,16 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api/")) {
-      return handleApi(request, url, env, ctx).catch((err) =>
-        json({ error: String(err?.message || err) }, 500)
-      );
+      return handleApi(request, url, env, ctx).catch((err) => {
+        // Log the real error; return something stable so internals (D1 messages,
+        // parser errors) never reach the browser.
+        console.error("unhandled API error", url.pathname, err);
+        return json({ error: "Something went wrong on the server." }, 500);
+      });
     }
 
     // Static assets: the login screen and UI only, never any secret
-    return env.ASSETS.fetch(request);
+    return withSecurityHeaders(await env.ASSETS.fetch(request));
   },
 };
 
@@ -37,6 +40,8 @@ async function handleApi(request, url, env, ctx) {
     case "/api/login":
       return handleLogin(request, env);
     case "/api/logout":
+      // GET would let any page force a logout with a bare <img> tag
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return handleLogout();
     case "/api/setup":
       // Lets the login page report a missing secret after deploy (never leaks values)
@@ -48,6 +53,16 @@ async function handleApi(request, url, env, ctx) {
       return (await isAuthed(request, env))
         ? json({ ok: true, history: Boolean(env.DB) })
         : json({ ok: false }, 401);
+  }
+
+  // SameSite=Strict is not enough on workers.dev: every Worker under the same
+  // account subdomain is same-site, and a top-level form POST needs no preflight.
+  // Same-origin fetch always sends Origin on state-changing methods.
+  if (!["GET", "HEAD"].includes(request.method)) {
+    const origin = request.headers.get("Origin");
+    if (origin && origin !== new URL(request.url).origin) {
+      return json({ error: "Bad origin" }, 403);
+    }
   }
 
   // Everything below requires a session
@@ -72,9 +87,16 @@ async function handleApi(request, url, env, ctx) {
 /* ---------------- Authentication ---------------- */
 
 async function hmacKey(env) {
-  // Derive the HMAC key from the master password. Good enough for a personal
-  // site, and changing the password invalidates every existing session.
-  const material = new TextEncoder().encode(env.MASTER_PASSWORD + "|mychat-session-v1");
+  // Prefer a dedicated SESSION_SECRET. Deriving the key from the master password
+  // means anyone who obtains one cookie can crack the password offline — the
+  // signed payload gives them a known plaintext/MAC pair, and a single
+  // unstretched SHA-256 is billions of guesses per second on a GPU.
+  // Falling back to the password keeps existing deployments working.
+  const material = new TextEncoder().encode(
+    env.SESSION_SECRET
+      ? env.SESSION_SECRET + "|mychat-session-v2"
+      : env.MASTER_PASSWORD + "|mychat-session-v1"
+  );
   const digest = await crypto.subtle.digest("SHA-256", material);
   return crypto.subtle.importKey("raw", digest, { name: "HMAC", hash: "SHA-256" }, false, [
     "sign",
@@ -124,11 +146,31 @@ async function handleLogin(request, env) {
       500
     );
   }
+  // Refuse an oversized body before parsing it — no legitimate password is
+  // anywhere near this, and parsing megabytes costs CPU we don't have.
+  const declared = Number(request.headers.get("Content-Length") || 0);
+  if (declared > 4096) return json({ error: "Request too large" }, 413);
+
   const { password } = await request.json().catch(() => ({}));
-  if (typeof password !== "string" || !timingSafeEqual(password, env.MASTER_PASSWORD)) {
-    await sleep(1000); // slow down brute force
+  if (typeof password !== "string" || password.length > 1024) {
+    await sleep(1000);
     return json({ error: "Incorrect password" }, 401);
   }
+
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (await isLockedOut(env, ip)) {
+    return json(
+      { error: "Too many failed attempts. Try again in a few minutes." },
+      429
+    );
+  }
+
+  if (!(await constantTimeEqual(password, env.MASTER_PASSWORD))) {
+    await recordFailure(env, ip);
+    await sleep(1000); // slows a sequential attacker; the lockout handles parallel ones
+    return json({ error: "Incorrect password" }, 401);
+  }
+  await clearFailures(env, ip);
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
   const token = await signSession(env, expiresAt);
   return json({ ok: true }, 200, {
@@ -142,16 +184,74 @@ function handleLogout() {
   });
 }
 
-function timingSafeEqual(a, b) {
+// Compare digests, not the raw strings. A byte-by-byte loop is O(len(input)),
+// so an unauthenticated request with a multi-megabyte password field could burn
+// far more than the 10ms CPU budget. Hashing first makes the comparison always
+// exactly 32 bytes regardless of input size, and removes the length oracle.
+async function constantTimeEqual(a, b) {
   const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = ab.length ^ bb.length;
-  const len = Math.max(ab.length, bb.length);
-  for (let i = 0; i < len; i++) {
-    diff |= (ab[i % (ab.length || 1)] || 0) ^ (bb[i % (bb.length || 1)] || 0);
-  }
+  const [ha, hb] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]);
+  const x = new Uint8Array(ha);
+  const y = new Uint8Array(hb);
+  let diff = 0;
+  for (let i = 0; i < 32; i++) diff |= x[i] ^ y[i];
   return diff === 0;
+}
+
+/* ---------------- Login rate limiting ---------------- */
+
+// The 1-second delay on a wrong password does nothing against a parallel
+// attacker: Workers invocations are independent, so 500 concurrent guesses all
+// sleep at once and still get 500 tries a second. The counter has to be shared,
+// so it lives in D1. Without a D1 binding this degrades to no limiting, which
+// is why the README also recommends a WAF rate-limit rule.
+const MAX_FAILURES = 8;
+const LOCKOUT_WINDOW_MS = 10 * 60 * 1000;
+
+async function isLockedOut(env, ip) {
+  if (!env.DB) return false;
+  try {
+    await ensureSchema(env);
+    const row = await env.DB.prepare(`SELECT count, first_at FROM login_failures WHERE ip = ?`)
+      .bind(ip)
+      .first();
+    if (!row) return false;
+    if (Date.now() - row.first_at > LOCKOUT_WINDOW_MS) {
+      await env.DB.prepare(`DELETE FROM login_failures WHERE ip = ?`).bind(ip).run();
+      return false;
+    }
+    return row.count >= MAX_FAILURES;
+  } catch {
+    return false; // never let a storage problem lock you out of your own site
+  }
+}
+
+async function recordFailure(env, ip) {
+  if (!env.DB) return;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO login_failures (ip, count, first_at) VALUES (?1, 1, ?2)
+       ON CONFLICT(ip) DO UPDATE SET
+         count = CASE WHEN ?2 - first_at > ?3 THEN 1 ELSE count + 1 END,
+         first_at = CASE WHEN ?2 - first_at > ?3 THEN ?2 ELSE first_at END`
+    )
+      .bind(ip, Date.now(), LOCKOUT_WINDOW_MS)
+      .run();
+  } catch {
+    /* best effort */
+  }
+}
+
+async function clearFailures(env, ip) {
+  if (!env.DB) return;
+  try {
+    await env.DB.prepare(`DELETE FROM login_failures WHERE ip = ?`).bind(ip).run();
+  } catch {
+    /* best effort */
+  }
 }
 
 /* ---------------- History (D1) ---------------- */
@@ -186,6 +286,13 @@ async function ensureSchema(env) {
     env.DB.prepare(
       `CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at DESC)`
     ),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS login_failures (
+         ip TEXT PRIMARY KEY,
+         count INTEGER NOT NULL,
+         first_at INTEGER NOT NULL
+       )`
+    ),
   ]);
   schemaReady = true;
 }
@@ -199,7 +306,7 @@ async function handleConversationList(request, env) {
         ORDER BY c.updated_at DESC
         LIMIT 200`
     ).all();
-    return json({ conversations: results || [] });
+    return json({ conversations: results || [] }, 200, { "Cache-Control": "no-store" });
   }
 
   if (request.method === "DELETE") {
@@ -224,7 +331,11 @@ async function handleConversation(request, env, id) {
     )
       .bind(id)
       .all();
-    return json({ conversation: conv, messages: results || [] });
+    const messages = (results || []).map((m) => ({
+      ...m,
+      content: deserializeContent(m.content),
+    }));
+    return json({ conversation: conv, messages }, 200, { "Cache-Control": "no-store" });
   }
 
   if (request.method === "PATCH") {
@@ -261,19 +372,87 @@ function makeTitle(content) {
     : "New chat";
 }
 
-// D1 caps a row at 2 MB and the free tier gives 500 MB total, so oversized
-// attachments are dropped from what we persist. The message still reaches the
-// model in full — only the stored copy loses its images.
-const MAX_STORED_CONTENT = 1_200_000;
+// D1 caps a row at 2 MB, so nothing oversized may ever reach .bind(). The
+// message still goes to the model in full — only the stored copy is reduced.
+// Note this counts BYTES, not UTF-16 units: CJK text is 3 bytes per character,
+// so a character-based limit would let a ~3.6 MB row through.
+const MAX_STORED_BYTES = 1_200_000;
+const encoder = new TextEncoder();
+const byteLength = (str) => encoder.encode(str).length;
 
 function serializeContent(content) {
-  if (typeof content === "string") return content;
-  const json = JSON.stringify(content);
-  if (json.length <= MAX_STORED_CONTENT) return json;
-  const stripped = content.map((p) =>
-    p?.type === "image_url" ? { type: "text", text: "[image omitted: too large to store]" } : p
+  const multimodal = Array.isArray(content);
+
+  if (!multimodal) {
+    const text = typeof content === "string" ? content : String(content ?? "");
+    return byteLength(text) <= MAX_STORED_BYTES ? text : truncate(text);
+  }
+
+  let json = JSON.stringify(content);
+  if (byteLength(json) <= MAX_STORED_BYTES) return markMultimodal(json);
+
+  // First try dropping just the images — usually they are the bulk of it.
+  json = JSON.stringify(
+    content.map((p) =>
+      p?.type === "image_url"
+        ? { type: "text", text: "[image omitted: too large to store]" }
+        : p
+    )
   );
-  return JSON.stringify(stripped);
+  if (byteLength(json) <= MAX_STORED_BYTES) return markMultimodal(json);
+
+  // Still too big (a giant pasted transcript). Truncating JSON would leave
+  // unparseable content behind the marker, so store the text parts as plain text.
+  const text = content
+    .filter((p) => p?.type === "text")
+    .map((p) => p.text)
+    .join("\n\n");
+  return truncate(text);
+}
+
+// Truncate on a byte boundary. Decoding without {stream:true} turns a severed
+// multi-byte sequence into U+FFFD rather than throwing.
+function truncate(text) {
+  const clipped = encoder.encode(text).slice(0, MAX_STORED_BYTES - 32);
+  return new TextDecoder().decode(clipped) + "\n[truncated]";
+}
+
+// Multimodal content is stored with an explicit marker rather than being
+// sniffed for on read. Without it, a reply that simply *is* a JSON array — very
+// common when you ask a model for JSON — gets reinterpreted as content parts:
+// it renders blank, and a model could forge an image_url part pointing anywhere.
+const MULTIMODAL_PREFIX = "\u0001mm:";
+
+function markMultimodal(json) {
+  return MULTIMODAL_PREFIX + json;
+}
+
+function deserializeContent(value) {
+  if (typeof value !== "string") return value;
+  if (value.startsWith(MULTIMODAL_PREFIX)) {
+    try {
+      const parsed = JSON.parse(value.slice(MULTIMODAL_PREFIX.length));
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      /* truncated or corrupt — fall through and show the raw text */
+    }
+    return value.slice(MULTIMODAL_PREFIX.length);
+  }
+  // Rows written before the marker existed: only treat as multimodal when every
+  // element really looks like a content part.
+  if (value[0] === "[") {
+    try {
+      const parsed = JSON.parse(value);
+      const looksLikeParts =
+        Array.isArray(parsed) &&
+        parsed.length > 0 &&
+        parsed.every((p) => p && (p.type === "text" || p.type === "image_url"));
+      if (looksLikeParts) return parsed;
+    } catch {
+      /* plain text that happens to start with [ */
+    }
+  }
+  return value;
 }
 
 async function saveMessage(env, convId, role, content, model) {
@@ -294,15 +473,20 @@ async function saveMessage(env, convId, role, content, model) {
 
 async function handleModels(request, env, ctx) {
   const cache = caches.default;
-  const cacheKey = new Request("https://mychat.internal/api/models-v1");
-  let cached = await cache.match(cacheKey);
-  if (cached) return new Response(cached.body, cached);
+  const cacheKey = new Request(new URL("/api/models-v1", request.url).toString());
+  // "Refresh models" must be able to bypass the cache, otherwise the button and
+  // the "model not found, refresh the list" advice would both be no-ops.
+  const bypass = new URL(request.url).searchParams.has("refresh");
+  if (!bypass) {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+  }
 
   const resp = await fetch(`${apiBase(env)}/models`, {
     headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}` },
   });
   if (!resp.ok) return json({ error: `Could not fetch the OpenRouter model list (${resp.status})` }, 502);
-  const { data } = await resp.json();
+  const { data } = (await resp.json().catch(() => ({}))) || {};
 
   const models = (data || [])
     .map((m) => ({
@@ -322,7 +506,7 @@ async function handleModels(request, env, ctx) {
   const image = models.filter((m) => m.output.includes("image"));
 
   const out = json({ updatedAt: Date.now(), chat, image }, 200, {
-    "Cache-Control": `public, max-age=${MODELS_CACHE_SECONDS}`,
+    "Cache-Control": `private, max-age=${MODELS_CACHE_SECONDS}`,
   });
   ctx.waitUntil(cache.put(cacheKey, out.clone()));
   return out;
@@ -348,7 +532,15 @@ async function handleChat(request, env, ctx) {
   const payload = { model, messages: body.messages, stream: true };
   if (body.wantsImage) payload.modalities = ["image", "text"];
 
-  const upstream = await fetchUpstreamWithRetry(env, request, payload);
+  let upstream;
+  try {
+    upstream = await fetchUpstreamWithRetry(env, request, payload);
+  } catch (err) {
+    if (err instanceof UpstreamUnreachable) {
+      return json({ error: err.message + ". Check your connection and retry.", retryable: true }, 502);
+    }
+    throw err;
+  }
 
   if (!upstream.ok) {
     const raw = await upstream.text();
@@ -356,31 +548,54 @@ async function handleChat(request, env, ctx) {
     return json({ error: e.message, code: upstream.status, retryable: e.retryable }, 502);
   }
 
-  // Upstream is ready: now create or reuse the conversation and save the message
-  let convId = body.conversationId || null;
+  // Upstream is ready: now create or reuse the conversation and save the message.
+  // Every D1 call here is best-effort — the model has already answered, so a
+  // storage problem must never turn into a failed chat. On error we simply stop
+  // persisting this turn and stream it through unsaved.
+  let convId = typeof body.conversationId === "string" ? body.conversationId : null;
   let createdNew = false;
   if (env.DB) {
-    await ensureSchema(env);
-    if (convId) {
-      const exists = await env.DB.prepare(`SELECT id FROM conversations WHERE id = ?`)
-        .bind(convId)
-        .first();
-      if (!exists) convId = null;
-    }
-    if (!convId) {
-      convId = crypto.randomUUID();
-      const now = Date.now();
+    try {
+      await ensureSchema(env);
+      if (convId) {
+        const exists = await env.DB.prepare(`SELECT id FROM conversations WHERE id = ?`)
+          .bind(convId)
+          .first();
+        if (!exists) convId = null;
+      }
+      if (!convId) {
+        convId = crypto.randomUUID();
+        const now = Date.now();
+        await env.DB.prepare(
+          `INSERT INTO conversations (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+        )
+          .bind(convId, makeTitle(lastUser?.content), model, now, now)
+          .run();
+        createdNew = true;
+      }
+
+      // The client sends the conversation exactly as it should be. Trim any stored
+      // messages beyond that prefix before appending, so Regenerate and Retry
+      // rewrite the tail instead of piling up duplicates.
+      const keep = Math.max(0, body.messages.length - 1);
       await env.DB.prepare(
-        `INSERT INTO conversations (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+        `DELETE FROM messages
+          WHERE conversation_id = ?1
+            AND id NOT IN (
+              SELECT id FROM messages WHERE conversation_id = ?1 ORDER BY id ASC LIMIT ?2
+            )`
       )
-        .bind(convId, makeTitle(lastUser?.content), model, now, now)
+        .bind(convId, keep)
         .run();
-      createdNew = true;
+
+      // Pass content through as-is: it may be a string or a multimodal array, and
+      // serializeContent() handles both. Coercing with String() here would turn an
+      // array into "[object Object]".
+      if (lastUser) await saveMessage(env, convId, "user", lastUser.content, model);
+    } catch (err) {
+      console.error("history write failed; streaming without persistence", err);
+      convId = null;
     }
-    // Pass content through as-is: it may be a string or a multimodal array, and
-    // serializeContent() handles both. Coercing with String() here would turn an
-    // array into "[object Object]".
-    if (lastUser) await saveMessage(env, convId, "user", lastUser.content, model);
   }
 
   const headers = {
@@ -398,34 +613,55 @@ async function handleChat(request, env, ctx) {
     return new Response(upstream.body, { headers });
   }
 
-  const decoder = new TextDecoder();
-  let acc = "";
-  let accImages = [];
-  let buf = "";
-  const collector = new TransformStream({
-    transform(chunk, controller) {
-      controller.enqueue(chunk); // pass through untouched so the UI stays live
-      buf += decoder.decode(chunk, { stream: true });
-      const lines = buf.split("\n");
-      buf = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = line.slice(6).trim();
-        if (!payload || payload === "[DONE]") continue;
+  // Split the stream: one branch goes to the browser, the other is drained in
+  // the background and persisted. Doing it this way — rather than persisting
+  // from a TransformStream's flush/cancel — means the reply is saved even when
+  // the client goes away mid-generation (Stop button, closed tab), and a failed
+  // D1 write can never surface as a broken response.
+  const [toClient, toStore] = upstream.body.tee();
+
+  ctx.waitUntil(
+    (async () => {
+      const decoder = new TextDecoder();
+      let acc = "";
+      const accImages = [];
+      let buf = "";
+
+      const consume = (line) => {
+        if (!line.startsWith("data:")) return;
+        const payload = line.slice(5).trim(); // the spec allows no space after "data:"
+        if (!payload || payload === "[DONE]") return;
+        let parsed;
         try {
-          const delta = JSON.parse(payload)?.choices?.[0]?.delta;
-          if (delta?.content) acc += delta.content;
-          // Image models stream their output as image_url parts
-          for (const img of delta?.images || []) {
-            const url = img?.image_url?.url;
-            if (url) accImages.push(url);
-          }
+          parsed = JSON.parse(payload);
         } catch {
-          /* ignore non-JSON keep-alive lines */
+          return; // keep-alive or other non-JSON line
         }
+        const delta = parsed?.choices?.[0]?.delta;
+        if (typeof delta?.content === "string") acc += delta.content;
+        for (const img of delta?.images || []) {
+          const url = img?.image_url?.url;
+          if (url) accImages.push(url);
+        }
+      };
+
+      const reader = toStore.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() || "";
+          for (const line of lines) consume(line);
+        }
+        buf += decoder.decode(); // flush any dangling multi-byte sequence
+        if (buf) consume(buf);
+      } catch (err) {
+        // Upstream died mid-stream; keep whatever arrived before that
+        console.error("upstream stream ended early", err);
       }
-    },
-    async flush() {
+
       if (!acc && !accImages.length) return;
       const content = accImages.length
         ? [
@@ -433,18 +669,55 @@ async function handleChat(request, env, ctx) {
             ...accImages.map((url) => ({ type: "image_url", image_url: { url } })),
           ]
         : acc;
-      await saveMessage(env, convId, "assistant", content, model);
-    },
-  });
+      try {
+        await saveMessage(env, convId, "assistant", content, model);
+      } catch (err) {
+        console.error("failed to persist assistant reply", err);
+      }
+    })()
+  );
 
-  return new Response(upstream.body.pipeThrough(collector), { headers });
+  return new Response(toClient, { headers });
 }
 
 /* ---------------- Helpers ---------------- */
 
+// img-src is the load-bearing directive here. A model can emit an image URL —
+// either streamed back as image_url, or as Markdown — and the browser fetches it
+// on render with no click. That is the standard prompt-injection exfiltration
+// channel: injected text tells the model to encode the conversation into a URL
+// on an attacker's host. Allowing only 'self' and data: keeps legitimate
+// generated images (which arrive as data URLs) working while killing beacons.
+function withSecurityHeaders(res) {
+  const headers = new Headers(res.headers);
+  headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "img-src 'self' data: blob:",
+      "connect-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+    ].join("; ")
+  );
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("X-Content-Type-Options", "nosniff");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 // OpenRouter endpoint. Point OPENROUTER_BASE_URL at a mirror or proxy if needed.
 function apiBase(env) {
   return (env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+}
+
+class UpstreamUnreachable extends Error {
+  constructor(cause) {
+    super(`Could not reach OpenRouter: ${cause?.message || cause}`);
+    this.name = "UpstreamUnreachable";
+  }
 }
 
 /**
@@ -455,13 +728,26 @@ function apiBase(env) {
  */
 async function fetchUpstreamWithRetry(env, request, payload, attempts = 3) {
   const backoffMs = [700, 1800]; // waits after the 1st and 2nd failure
+  // Serialise once: the body is identical on every attempt, and for a message
+  // with image attachments this is megabytes of work against a 10ms CPU budget.
+  const body = JSON.stringify(payload);
   let resp;
+  let lastError;
   for (let i = 0; i < attempts; i++) {
-    resp = await fetch(`${apiBase(env)}/chat/completions`, {
-      method: "POST",
-      headers: openrouterHeaders(env, request),
-      body: JSON.stringify(payload),
-    });
+    try {
+      resp = await fetch(`${apiBase(env)}/chat/completions`, {
+        method: "POST",
+        headers: openrouterHeaders(env, request),
+        body,
+      });
+    } catch (err) {
+      // A dropped connection is exactly the transient failure this retries for,
+      // so it must not escape the loop as an unhandled 500.
+      lastError = err;
+      if (i === attempts - 1) throw new UpstreamUnreachable(lastError);
+      await sleep(backoffMs[i] ?? 1800);
+      continue;
+    }
     if (resp.ok) return resp;
     // Retry only transient failures. A 4xx other than 429 means a bad request
     // or bad config, and retrying it would never help.
@@ -474,7 +760,15 @@ async function fetchUpstreamWithRetry(env, request, payload, attempts = 3) {
 }
 
 /** Turn OpenRouter's raw error JSON into one plain-English sentence */
+// OPENROUTER_BASE_URL can be pointed at a mirror; if that mirror echoes the
+// request back, the Bearer token would travel into the browser through the
+// error text. Strip anything that looks like a key before returning it.
+function redactKeys(text) {
+  return String(text).replace(/sk-[A-Za-z0-9_\-]{8,}/g, "sk-***");
+}
+
 function describeUpstreamError(status, rawText) {
+  rawText = redactKeys(rawText);
   let data = null;
   try {
     data = JSON.parse(rawText);

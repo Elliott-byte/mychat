@@ -27,6 +27,9 @@
       },
       "MASTER_PASSWORD": {
         "description": "The master password for signing in — **only you should know it**. Use something strong (16+ random characters); `openssl rand -base64 24` will generate one."
+      },
+      "SESSION_SECRET": {
+        "description": "Optional but recommended. A random string used to sign session cookies, generated with `openssl rand -base64 32`. Without it the signing key is derived from your master password, which means a leaked cookie could be used to crack it offline."
       }
     }
   },

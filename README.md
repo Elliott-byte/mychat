@@ -186,7 +186,10 @@ nvm alias default 22        # 或设为默认,一劳永逸
 | API Key 存储 | Cloudflare Secret(加密存储),仅服务端 `env.OPENROUTER_API_KEY` 读取 |
 | 主密码存储 | Cloudflare Secret,不落代码库 |
 | 会话凭证 | HMAC-SHA256 签名 Cookie,`HttpOnly` + `Secure` + `SameSite=Strict`,7 天有效 |
-| 密码比对 | 恒定时间比较防时序攻击;失败延迟 1 秒,减缓暴力破解 |
+| 密码比对 | 比较 SHA-256 摘要(恒定 32 字节),既防时序攻击,也杜绝超大密码字段打爆 CPU |
+| 暴力破解 | 失败次数记在 D1 里,10 分钟内错 8 次即锁定。计数跨请求共享,并发攻击同样受限 |
+| 防 CSRF | 所有状态变更请求校验 Origin(`SameSite=Strict` 在 workers.dev 同账号下不够用) |
+| 内容安全策略 | `img-src 'self' data:` —— 模型若被提示注入诱导返回外链图片,浏览器不会去请求,杜绝对话内容外泄 |
 | 接口保护 | `/api/models`、`/api/chat`、`/api/image` 全部校验会话,未登录返回 401 |
 | 聊天历史 | 存于你自己的 Cloudflare D1,只有登录后才能读写,不经过任何第三方 |
 | 搜索引擎 | 页面带 `noindex, nofollow` |
@@ -246,6 +249,7 @@ mychat/
 |---|---|---|
 | `OPENROUTER_API_KEY` | Secret | **必填**,OpenRouter 密钥 |
 | `MASTER_PASSWORD` | Secret | **必填**,登录主密码 |
+| `SESSION_SECRET` | Secret | 可选但**建议配置**。用 `openssl rand -base64 32` 生成,用于签名会话 Cookie。不配的话签名密钥由主密码派生 —— 一旦 Cookie 泄露,攻击者可离线爆破出你的主密码 |
 | `OPENROUTER_BASE_URL` | 普通变量 | 可选。默认 `https://openrouter.ai/api/v1`,网络不通时可指向镜像或自建代理 |
 
 ---

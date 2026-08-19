@@ -1,2 +1,3 @@
 OPENROUTER_API_KEY="sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxx"
 MASTER_PASSWORD="replace-with-your-own-strong-password"
+SESSION_SECRET="optional-but-recommended-openssl-rand-base64-32"

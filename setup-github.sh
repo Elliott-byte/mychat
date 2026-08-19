@@ -37,9 +37,21 @@ git add -A
 git commit -q -m "MyChat: a private AI playground (Cloudflare Workers + OpenRouter)" \
   || echo "  (nothing new to commit)"
 
+# Actually verify the claim instead of just asserting it — this repo is about to
+# become public, and a key in an un-ignored file would be published with it.
+echo "▶ Scanning tracked files for anything key-shaped …"
+SCAN_RE='sk-or-v1-[A-Za-z0-9]{12,}|sk-[A-Za-z0-9]{32,}'
+# Exclude the placeholder template, and ignore all-x dummy values.
+if git grep -InE "$SCAN_RE" -- . ':(exclude).dev.vars.example' | grep -qvE 'x{12,}'; then
+  echo "❌ Found something that looks like an API key in a tracked file:"
+  git grep -InE "$SCAN_RE" -- . ':(exclude).dev.vars.example' | grep -vE 'x{12,}' | head
+  echo "   Remove it before publishing (and rotate it if it was ever committed)."
+  exit 1
+fi
+echo "  ✅ nothing found"
+
 echo "▶ Creating a public repository and pushing …"
 echo "  Note: the deploy button requires a public repository."
-echo "  This project contains no secrets, so publishing it is safe."
 if command -v gh >/dev/null 2>&1; then
   gh repo create "$REPO" --public --source=. --push
 else

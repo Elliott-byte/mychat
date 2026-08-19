@@ -23,7 +23,7 @@ export const api = {
 
   logout: () => fetch("/api/logout", { method: "POST" }),
 
-  models: () => req("/api/models"),
+  models: ({ refresh } = {}) => req("/api/models" + (refresh ? "?refresh=1" : "")),
 
   conversations: () => req("/api/conversations"),
 
@@ -41,11 +41,11 @@ export const api = {
   clearConversations: () => req("/api/conversations", { method: "DELETE" }),
 
   // Streaming chat: fires onDelta per chunk, resolves with this turn's conversation id
-  async chatStream({ model, messages, conversationId, signal, onDelta }) {
+  async chatStream({ model, messages, conversationId, wantsImage, signal, onDelta }) {
     const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages, conversationId }),
+      body: JSON.stringify({ model, messages, conversationId, wantsImage }),
       signal,
     });
     if (!r.ok) {
@@ -66,8 +66,8 @@ export const api = {
       const lines = buf.split("\n");
       buf = lines.pop() || "";
       for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = line.slice(6).trim();
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim(); // the spec allows no space after "data:"
         if (!payload || payload === "[DONE]") continue;
         let j;
         try {

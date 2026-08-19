@@ -6,16 +6,18 @@ import { imagesFromDataTransfer, isImageFile, prepareImage } from "../lib/image"
 function partsOf(content) {
   if (typeof content === "string") return { text: content, images: [] };
   if (!Array.isArray(content)) return { text: "", images: [] };
-  return {
-    text: content.filter((p) => p?.type === "text").map((p) => p.text).join("\n\n"),
-    images: content
-      .filter((p) => p?.type === "image_url")
-      .map((p) => p.image_url?.url)
-      .filter(Boolean),
-  };
+  const text = content.filter((p) => p?.type === "text").map((p) => p.text).join("\n\n");
+  const images = content
+    .filter((p) => p?.type === "image_url")
+    .map((p) => p.image_url?.url)
+    .filter(Boolean);
+  // An array we don't recognise (e.g. the user literally sent JSON) would
+  // otherwise render as an empty bubble — show it rather than lose it.
+  if (!text && !images.length) return { text: JSON.stringify(content), images: [] };
+  return { text, images };
 }
 
-function Message({ role, content, model, streaming, onCopy, onRegenerate }) {
+function Message({ role, content, model, streaming, onCopy, onRegenerate, onImageLoad }) {
   const { text, images } = partsOf(content);
   return (
     <div className={"msg " + role}>
@@ -27,7 +29,7 @@ function Message({ role, content, model, streaming, onCopy, onRegenerate }) {
           <div className="msg-images">
             {images.map((src, i) => (
               <a key={i} href={src} target="_blank" rel="noopener noreferrer">
-                <img src={src} alt="" />
+                <img src={src} alt="" onLoad={onImageLoad} />
               </a>
             ))}
           </div>
@@ -35,7 +37,7 @@ function Message({ role, content, model, streaming, onCopy, onRegenerate }) {
 
         {(text || streaming) && (
           <div className={"bubble" + (streaming ? " cursor" : "")}>
-            <Markdown text={text} />
+            <Markdown text={text} streaming={streaming} />
           </div>
         )}
 
@@ -85,6 +87,7 @@ export function ChatView({
 }) {
   const [input, setInput] = useState("");
   const [attached, setAttached] = useState([]);
+  const [preparing, setPreparing] = useState(0);
   const [dragging, setDragging] = useState(false);
   const logRef = useRef(null);
   const taRef = useRef(null);
@@ -103,12 +106,31 @@ export function ChatView({
     if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }
 
-  useEffect(() => {
+  // Images have no height until they decode, so the layout grows after the
+  // scroll already happened. Re-pin once each one lands.
+  function scrollIfStuck() {
+    const el = logRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }
+
+  useLayoutEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   }, [input]);
+
+  // #20: dropping a file anywhere outside the drop zone would otherwise make the
+  // browser navigate to it, losing an unsent conversation.
+  useEffect(() => {
+    const swallow = (e) => e.preventDefault();
+    window.addEventListener("dragover", swallow);
+    window.addEventListener("drop", swallow);
+    return () => {
+      window.removeEventListener("dragover", swallow);
+      window.removeEventListener("drop", swallow);
+    };
+  }, []);
 
   async function addFiles(files) {
     const list = [...files].filter(isImageFile);
@@ -117,12 +139,14 @@ export function ChatView({
       onToast("This model cannot read images — pick one marked 👁");
       return;
     }
-    try {
-      const prepared = await Promise.all(list.map(prepareImage));
-      setAttached((a) => [...a, ...prepared]);
-    } catch (err) {
-      onToast(err.message || "Could not attach that image");
-    }
+    setPreparing((n) => n + list.length);
+    // allSettled: one bad file must not discard the whole batch
+    const results = await Promise.allSettled(list.map(prepareImage));
+    setPreparing((n) => Math.max(0, n - list.length));
+    const ok = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
+    const failed = results.filter((r) => r.status === "rejected");
+    if (ok.length) setAttached((a) => [...a, ...ok]);
+    if (failed.length) onToast(failed[0].reason?.message || "Could not attach that image");
   }
 
   // Paste an image straight into the composer
@@ -143,6 +167,10 @@ export function ChatView({
   function submit() {
     if (busy) {
       onStop();
+      return;
+    }
+    if (preparing > 0) {
+      onToast("Still processing the image…");
       return;
     }
     const text = input.trim();
@@ -194,6 +222,7 @@ export function ChatView({
                     onToast("Copied");
                   }}
                   onRegenerate={m.role === "assistant" ? () => onRegenerate(i) : undefined}
+                  onImageLoad={scrollIfStuck}
                 />
               ))}
               {streamingText !== null && (
@@ -208,7 +237,7 @@ export function ChatView({
       </div>
 
       <div className="input-wrap">
-        {attached.length > 0 && (
+        {(attached.length > 0 || preparing > 0) && (
           <div className="attachments">
             {attached.map((a, i) => (
               <div className="attachment" key={i}>
@@ -223,6 +252,12 @@ export function ChatView({
                 <span className="attachment-size">{Math.round(a.bytes / 1024)} KB</span>
               </div>
             ))}
+            {preparing > 0 &&
+              Array.from({ length: preparing }, (_, i) => (
+                <div className="attachment preparing" key={"p" + i}>
+                  <span>…</span>
+                </div>
+              ))}
           </div>
         )}
 
@@ -253,6 +288,9 @@ export function ChatView({
             onChange={(e) => setInput(e.target.value)}
             onPaste={onPaste}
             onKeyDown={(e) => {
+              // While an IME is composing, Enter confirms the candidate — it must
+              // not also send the message, or Chinese/Japanese input sends fragments.
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 submit();
