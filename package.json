@@ -1,0 +1,29 @@
+{
+  "name": "mychat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "私人 AI 试用台 — Cloudflare Workers + OpenRouter,支持最新模型自动更新",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "secret:key": "wrangler secret put OPENROUTER_API_KEY",
+    "secret:pass": "wrangler secret put MASTER_PASSWORD"
+  },
+  "cloudflare": {
+    "label": "MyChat — 私人 AI 试用台",
+    "products": ["Workers"],
+    "categories": ["ai"],
+    "docs_url": "https://github.com/Elliott-byte/mychat#readme",
+    "bindings": {
+      "OPENROUTER_API_KEY": {
+        "description": "你的 OpenRouter API Key。到 [openrouter.ai/keys](https://openrouter.ai/keys) 创建,格式形如 `sk-or-v1-...`。它只保存在服务端,永远不会发送到浏览器。"
+      },
+      "MASTER_PASSWORD": {
+        "description": "登录本站的主密码,**只有你知道**。请用强密码(建议 16 位以上随机字符),可以用 `openssl rand -base64 24` 生成。"
+      }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "^4.28.0"
+  }
+}

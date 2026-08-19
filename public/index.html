@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>MyChat · AI 试用台</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel2: #1e2230;
+    --border: #2a2f3f;
+    --text: #e8eaf0;
+    --muted: #8b91a5;
+    --accent: #6c8cff;
+    --accent-hover: #8aa2ff;
+    --green: #4ade80;
+    --red: #f87171;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    height: 100dvh; display: flex; flex-direction: column;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input, textarea, select { font-family: inherit; color: var(--text); }
+
+  /* ---------- 登录 ---------- */
+  #login-view {
+    flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .login-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 40px 36px; width: 100%; max-width: 380px; text-align: center;
+  }
+  .login-card h1 { font-size: 22px; margin-bottom: 6px; }
+  .login-card p { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .login-card input {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel2); font-size: 15px; outline: none; margin-bottom: 14px;
+  }
+  .login-card input:focus { border-color: var(--accent); }
+  .login-card button {
+    width: 100%; padding: 12px; border-radius: 10px; border: none;
+    background: var(--accent); color: #fff; font-size: 15px; font-weight: 600;
+  }
+  .login-card button:hover { background: var(--accent-hover); }
+  .login-error { color: var(--red); font-size: 13px; margin-top: 12px; min-height: 18px; }
+  .setup-warn {
+    display: none; text-align: left; font-size: 12.5px; line-height: 1.6; margin-bottom: 16px;
+    padding: 12px 14px; border-radius: 10px; background: rgba(248,113,113,.1);
+    border: 1px solid rgba(248,113,113,.35); color: #fca5a5;
+  }
+  .setup-warn.show { display: block; }
+  .setup-warn b { color: #fecaca; }
+
+  /* ---------- 主界面 ---------- */
+  #app-view { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  header {
+    display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap;
+  }
+  .logo { font-weight: 700; font-size: 16px; }
+  .tabs { display: flex; gap: 4px; background: var(--panel2); border-radius: 10px; padding: 3px; }
+  .tabs button {
+    padding: 7px 16px; border: none; background: transparent; color: var(--muted);
+    border-radius: 8px; font-size: 14px;
+  }
+  .tabs button.active { background: var(--accent); color: #fff; }
+  .spacer { flex: 1; }
+  .model-box { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  select {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; font-size: 13px; max-width: 320px; outline: none;
+  }
+  .small-btn {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px;
+  }
+  .small-btn:hover { color: var(--text); border-color: var(--accent); }
+  label.chk { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  #model-search {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; font-size: 13px; width: 130px; outline: none;
+  }
+  #model-info { font-size: 12px; color: var(--muted); width: 100%; }
+
+  main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .pane { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  .pane.active { display: flex; }
+
+  /* ---------- 聊天 ---------- */
+  #chat-log {
+    flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;
+    max-width: 860px; width: 100%; margin: 0 auto;
+  }
+  .msg { display: flex; flex-direction: column; gap: 4px; max-width: 92%; }
+  .msg .role { font-size: 11px; color: var(--muted); }
+  .msg .bubble {
+    padding: 10px 14px; border-radius: var(--radius); font-size: 14.5px; line-height: 1.65;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .msg.user .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.assistant { align-self: flex-start; }
+  .msg.assistant .bubble { background: var(--panel2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .bubble code { background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .bubble pre {
+    background: rgba(0,0,0,.35); padding: 10px 12px; border-radius: 8px; overflow-x: auto;
+    margin: 6px 0; font-size: 13px; white-space: pre;
+  }
+  .bubble pre code { background: none; padding: 0; }
+  .input-bar {
+    display: flex; gap: 10px; padding: 14px 16px 18px; max-width: 860px; width: 100%; margin: 0 auto;
+  }
+  .input-bar textarea {
+    flex: 1; background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 11px 14px; font-size: 14.5px; resize: none; outline: none; min-height: 46px; max-height: 160px;
+  }
+  .input-bar textarea:focus { border-color: var(--accent); }
+  .send-btn {
+    background: var(--accent); border: none; color: #fff; border-radius: var(--radius);
+    padding: 0 22px; font-size: 15px; font-weight: 600;
+  }
+  .send-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ---------- 图片 ---------- */
+  #image-pane .wrap { max-width: 860px; width: 100%; margin: 0 auto; padding: 20px; overflow-y: auto; flex: 1; }
+  #image-pane textarea {
+    width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; font-size: 14.5px; resize: vertical; min-height: 90px; outline: none;
+  }
+  #image-pane textarea:focus { border-color: var(--accent); }
+  .img-controls { display: flex; gap: 10px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+  #img-results { margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .img-item { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .img-item .prompt-text { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .img-item img { max-width: 100%; border-radius: 8px; display: block; }
+  .img-item .actions { margin-top: 10px; display: flex; gap: 8px; }
+  .img-item .note { font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  #img-attach-preview { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  #img-attach-preview img { height: 64px; border-radius: 6px; border: 1px solid var(--border); }
+  .loading { color: var(--muted); font-size: 13px; }
+  .error-text { color: var(--red); font-size: 13px; }
+  @media (max-width: 640px) {
+    select { max-width: 180px; }
+    header { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div id="login-view">
+  <form class="login-card" id="login-form">
+    <h1>🔐 MyChat</h1>
+    <p>私人 AI 试用台 · 请输入主密码</p>
+    <div class="setup-warn" id="setup-warn"></div>
+    <input type="password" id="password" placeholder="主密码" autocomplete="current-password" autofocus>
+    <button type="submit">进入</button>
+    <div class="login-error" id="login-error"></div>
+  </form>
+</div>
+
+<!-- 主界面 -->
+<div id="app-view">
+  <header>
+    <span class="logo">MyChat</span>
+    <div class="tabs">
+      <button id="tab-chat" class="active">💬 对话</button>
+      <button id="tab-image">🎨 图片</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="model-box">
+      <input id="model-search" placeholder="搜索模型…">
+      <label class="chk"><input type="checkbox" id="free-only"> 只看免费</label>
+      <select id="model-select"></select>
+      <button class="small-btn" id="refresh-models" title="刷新模型列表">⟳</button>
+      <button class="small-btn" id="clear-chat">清空对话</button>
+      <button class="small-btn" id="logout">退出</button>
+    </div>
+    <div id="model-info"></div>
+  </header>
+
+  <main>
+    <!-- 聊天 -->
+    <div class="pane active" id="chat-pane">
+      <div id="chat-log"></div>
+      <div class="input-bar">
+        <textarea id="chat-input" placeholder="输入消息,Enter 发送,Shift+Enter 换行"></textarea>
+        <button class="send-btn" id="chat-send">发送</button>
+      </div>
+    </div>
+
+    <!-- 图片 -->
+    <div class="pane" id="image-pane">
+      <div class="wrap">
+        <textarea id="img-prompt" placeholder="描述你想生成的图片…(选择支持图片输出的模型)"></textarea>
+        <div class="img-controls">
+          <button class="send-btn" id="img-send" style="padding: 10px 22px;">生成图片</button>
+          <label class="small-btn" style="display:inline-block;">
+            📎 参考图(图生图)
+            <input type="file" id="img-file" accept="image/*" multiple hidden>
+          </label>
+          <span class="loading" id="img-status"></span>
+        </div>
+        <div id="img-attach-preview"></div>
+        <div id="img-results"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let allModels = { chat: [], image: [] };
+let mode = "chat"; // chat | image
+let chatHistory = [];
+let attachedImages = [];
+let streaming = false;
+
+/* ---------- 登录 ---------- */
+async function checkAuth() {
+  const r = await fetch("/api/me");
+  if (r.ok) { showApp(); return; }
+  checkSetup();
+}
+
+// 一键部署后若漏配密钥,在登录页直接提示,不必去翻日志
+async function checkSetup() {
+  try {
+    const s = await (await fetch("/api/setup")).json();
+    const missing = [];
+    if (!s.hasPassword) missing.push("MASTER_PASSWORD");
+    if (!s.hasApiKey) missing.push("OPENROUTER_API_KEY");
+    if (!missing.length) return;
+    $("setup-warn").innerHTML =
+      `⚠️ <b>部署尚未完成</b><br>缺少密钥:<b>${missing.join("、")}</b><br>` +
+      `请到 Cloudflare 控制台 → Workers &amp; Pages → mychat → Settings → ` +
+      `Variables and Secrets 添加(类型选 Secret),然后重新部署。`;
+    $("setup-warn").classList.add("show");
+  } catch {}
+}
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("login-error").textContent = "";
+  const r = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: $("password").value }),
+  });
+  if (r.ok) { showApp(); }
+  else {
+    const d = await r.json().catch(() => ({}));
+    $("login-error").textContent = d.error || "登录失败";
+  }
+});
+$("logout").addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" });
+  location.reload();
+});
+function showApp() {
+  $("login-view").style.display = "none";
+  $("app-view").style.display = "flex";
+  loadModels();
+}
+
+/* ---------- 模型列表 ---------- */
+async function loadModels() {
+  $("model-info").textContent = "正在加载模型列表…";
+  try {
+    const r = await fetch("/api/models");
+    if (!r.ok) throw new Error((await r.json()).error || r.status);
+    allModels = await r.json();
+    renderModelSelect();
+  } catch (err) {
+    $("model-info").textContent = "模型列表加载失败:" + err.message;
+  }
+}
+function currentList() {
+  return mode === "chat" ? allModels.chat : allModels.image;
+}
+function isFree(m) {
+  return m.id.endsWith(":free") || (m.promptPrice === 0 && m.completionPrice === 0 && m.imagePrice === 0);
+}
+function renderModelSelect() {
+  const sel = $("model-select");
+  const search = $("model-search").value.trim().toLowerCase();
+  const freeOnly = $("free-only").checked;
+  const prev = sel.value;
+  let list = currentList() || [];
+  if (freeOnly) list = list.filter(isFree);
+  if (search) list = list.filter((m) => (m.id + " " + m.name).toLowerCase().includes(search));
+  sel.innerHTML = "";
+  for (const m of list.slice(0, 300)) {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = (isFree(m) ? "🆓 " : "") + m.name;
+    sel.appendChild(opt);
+  }
+  if (prev && list.some((m) => m.id === prev)) sel.value = prev;
+  updateModelInfo();
+}
+function updateModelInfo() {
+  const m = (currentList() || []).find((x) => x.id === $("model-select").value);
+  if (!m) { $("model-info").textContent = "无匹配模型"; return; }
+  const price = isFree(m)
+    ? "免费"
+    : `输入 $${(m.promptPrice * 1e6).toFixed(2)}/M · 输出 $${(m.completionPrice * 1e6).toFixed(2)}/M`;
+  const date = m.created ? new Date(m.created * 1000).toISOString().slice(0, 10) : "?";
+  $("model-info").textContent = `${m.id} · 上线 ${date} · 上下文 ${m.context ? (m.context / 1000).toFixed(0) + "K" : "?"} · ${price}`;
+}
+$("model-search").addEventListener("input", renderModelSelect);
+$("free-only").addEventListener("change", renderModelSelect);
+$("model-select").addEventListener("change", updateModelInfo);
+$("refresh-models").addEventListener("click", loadModels);
+
+/* ---------- Tab 切换 ---------- */
+function setMode(m) {
+  mode = m;
+  $("tab-chat").classList.toggle("active", m === "chat");
+  $("tab-image").classList.toggle("active", m === "image");
+  $("chat-pane").classList.toggle("active", m === "chat");
+  $("image-pane").classList.toggle("active", m === "image");
+  renderModelSelect();
+}
+$("tab-chat").addEventListener("click", () => setMode("chat"));
+$("tab-image").addEventListener("click", () => setMode("image"));
+
+/* ---------- 聊天 ---------- */
+function renderMarkdown(text) {
+  let html = text
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${code}</code></pre>`);
+  html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  return html;
+}
+function addMsg(role, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.innerHTML = `<span class="role">${role === "user" ? "我" : $("model-select").value}</span><div class="bubble"></div>`;
+  div.querySelector(".bubble").innerHTML = renderMarkdown(text);
+  $("chat-log").appendChild(div);
+  $("chat-log").scrollTop = $("chat-log").scrollHeight;
+  return div.querySelector(".bubble");
+}
+async function sendChat() {
+  if (streaming) return;
+  const text = $("chat-input").value.trim();
+  const model = $("model-select").value;
+  if (!text || !model) return;
+  $("chat-input").value = "";
+  chatHistory.push({ role: "user", content: text });
+  addMsg("user", text);
+  const bubble = addMsg("assistant", "…");
+  streaming = true;
+  $("chat-send").disabled = true;
+  let full = "";
+  try {
+    const r = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, messages: chatHistory }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || "请求失败 " + r.status);
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6).trim();
+        if (payload === "[DONE]") continue;
+        try {
+          const j = JSON.parse(payload);
+          const delta = j.choices?.[0]?.delta?.content;
+          if (delta) {
+            full += delta;
+            bubble.innerHTML = renderMarkdown(full);
+            $("chat-log").scrollTop = $("chat-log").scrollHeight;
+          }
+          if (j.error) throw new Error(j.error.message || JSON.stringify(j.error));
+        } catch (e) { if (e instanceof SyntaxError) continue; throw e; }
+      }
+    }
+    if (!full) full = "(空响应)";
+    chatHistory.push({ role: "assistant", content: full });
+  } catch (err) {
+    bubble.innerHTML = `<span class="error-text">⚠️ ${renderMarkdown(String(err.message || err))}</span>`;
+    chatHistory.pop(); // 回滚失败的用户消息
+  } finally {
+    streaming = false;
+    $("chat-send").disabled = false;
+  }
+}
+$("chat-send").addEventListener("click", sendChat);
+$("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+$("clear-chat").addEventListener("click", () => {
+  chatHistory = [];
+  $("chat-log").innerHTML = "";
+});
+
+/* ---------- 图片生成 ---------- */
+$("img-file").addEventListener("change", async (e) => {
+  attachedImages = [];
+  $("img-attach-preview").innerHTML = "";
+  for (const file of e.target.files) {
+    const dataUrl = await new Promise((res) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.readAsDataURL(file);
+    });
+    attachedImages.push(dataUrl);
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    $("img-attach-preview").appendChild(img);
+  }
+});
+$("img-send").addEventListener("click", async () => {
+  const prompt = $("img-prompt").value.trim();
+  const model = $("model-select").value;
+  if (!prompt || !model) return;
+  $("img-send").disabled = true;
+  $("img-status").textContent = "生成中,请稍候…";
+  try {
+    const r = await fetch("/api/image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, images: attachedImages }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "生成失败");
+    const item = document.createElement("div");
+    item.className = "img-item";
+    item.innerHTML = `<div class="prompt-text">「${prompt.replace(/</g, "&lt;")}」 · ${model}</div>`;
+    if (!d.images.length && !d.text) item.innerHTML += `<div class="error-text">模型没有返回图片</div>`;
+    d.images.forEach((url, i) => {
+      const img = document.createElement("img");
+      img.src = url;
+      item.appendChild(img);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mychat-${Date.now()}-${i}.png`;
+      a.textContent = "⬇ 下载";
+      a.className = "small-btn";
+      a.style.textDecoration = "none";
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      actions.appendChild(a);
+      item.appendChild(actions);
+    });
+    if (d.text) {
+      const note = document.createElement("div");
+      note.className = "note";
+      note.textContent = d.text;
+      item.appendChild(note);
+    }
+    $("img-results").prepend(item);
+  } catch (err) {
+    const item = document.createElement("div");
+    item.className = "img-item";
+    item.innerHTML = `<div class="error-text">⚠️ ${String(err.message || err).replace(/</g, "&lt;")}</div>`;
+    $("img-results").prepend(item);
+  } finally {
+    $("img-send").disabled = false;
+    $("img-status").textContent = "";
+  }
+});
+
+checkAuth();
+</script>
+</body>
+</html>
