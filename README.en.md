@@ -25,7 +25,7 @@ A personal AI playground running on Cloudflare Workers' free tier, calling the l
 - **Models update themselves** — The model list is fetched live from OpenRouter and sorted newest-first, so new releases show up at the top without any code changes.
 - **ChatGPT-style interface** — Conversation history in a left sidebar, streaming output, stop generation, regenerate, one-click copy.
 - **History stored in the cloud** — Conversations live in Cloudflare D1 (also free), so switching devices shows you the same history.
-- **Chat + images in one place** — Streaming conversations, text-to-image, and image-to-image.
+- **Images live in the chat** — paste, drop, or attach an image without switching screens. Models that read images are marked 👁, models that return them 🎨.
 - **React frontend** — React 19 + Vite, component-based.
 - **Full Markdown** — headings, lists, tables, blockquotes, task lists; code blocks get syntax highlighting and a copy button.
 
@@ -134,10 +134,18 @@ nvm alias default 22        # or make it the default once and for all
 - Switching models does **not** clear the current conversation, so you can put the same question to different models back to back
 - The input box grows with your text, and scrolling up to read won't yank you back to the bottom
 
-### 🎨 Images
-- Automatically filters to models that **output images** (Nano Banana, GPT-5 Image, and so on)
-- Enter a prompt to generate an image, then download it
-- **Image-to-image** is supported: click "📎 reference image" to attach one or more inputs
+### 🖼 Images
+Images work inside the conversation — there is no separate screen:
+
+- **Paste** (Cmd+V), **drop** onto the window, or click **📎** beside the composer
+- Thumbnails appear before you send, each removable, labelled with its compressed size
+- Images are resized in the browser to 1280px on the long edge and re-encoded as JPEG,
+  usually taking a multi-megabyte photo down to 100-300 KB — cheaper in tokens, faster to
+  upload, and small enough for D1 (2 MB per row)
+- In the model dropdown, **👁** means the model can read images and **🎨** means it can
+  return them. Pick an image-capable model and its output appears inline; click to open full size
+- Attachments are saved with the conversation. If one is too large to store, only the stored
+  copy degrades to a placeholder — what gets sent to the model is always complete
 
 ### ⟳ Refresh models
 The model list is cached server-side for one hour and refreshes on its own. Click "⟳ refresh models" at the bottom-left to pull the latest immediately.
@@ -203,7 +211,7 @@ All the browser ever sees is the frontend HTML/JS and a session cookie — **nev
 
 - **Cloudflare Workers free tier**: 100,000 requests/day, 10ms CPU time per request (proxying a stream uses almost no CPU)
 - **Static assets**: free, and they don't count toward the request quota
-- **Cloudflare D1** (chat history): free tier includes 5GB storage and 5M row reads / 100K row writes per day
+- **Cloudflare D1** (chat history): free tier gives **500 MB** of storage and 5M row reads / 100K row writes per day (2 MB max per row)
 - **OpenRouter**: models ending in `:free` cost nothing (rate-limited); everything else is pay-as-you-go
 
 Personal use will essentially never reach Cloudflare's free ceiling.

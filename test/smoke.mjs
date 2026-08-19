@@ -14,11 +14,11 @@ const bundle = fs.readFileSync(
 
 const MODELS = {
   chat: [
-    { id: "x/fast", name: "X Fast", created: 1750000000, context: 128000, input: ["text"], output: ["text"], promptPrice: 0.000001, completionPrice: 0.000002, imagePrice: 0 },
+    { id: "x/fast", name: "X Fast", created: 1750000000, context: 128000, input: ["text", "image"], output: ["text"], promptPrice: 0.000001, completionPrice: 0.000002, imagePrice: 0 },
     { id: "y/free:free", name: "Y Free (free)", created: 1740000000, context: 32000, input: ["text"], output: ["text"], promptPrice: 0, completionPrice: 0, imagePrice: 0 },
   ],
   image: [
-    { id: "z/img", name: "Z Image", created: 1745000000, context: 32000, input: ["text"], output: ["image", "text"], promptPrice: 0, completionPrice: 0, imagePrice: 0 },
+    { id: "z/img", name: "Z Image", created: 1745000000, context: 32000, input: ["text", "image"], output: ["image", "text"], promptPrice: 0, completionPrice: 0, imagePrice: 0 },
   ],
 };
 
@@ -135,8 +135,13 @@ console.log("\n=== Case B: signed in ===");
   check("renders the sidebar", !!doc.querySelector(".sidebar"));
   check("lists 2 conversations", doc.querySelectorAll(".conv").length === 2, `got ${doc.querySelectorAll(".conv").length}`);
   check("conversation titles are correct", txt.includes("First conversation") && txt.includes("Second conversation"));
-  check("model dropdown is populated", doc.querySelectorAll("select option").length === 2);
+  check("model dropdown merges chat + image models", doc.querySelectorAll("select option").length === 3,
+    `got ${doc.querySelectorAll("select option").length}`);
+  check("composer has an attach button", !!doc.querySelector(".attach-btn"));
+  check("image tab is gone", !doc.querySelector(".mode-tabs"));
   check("free models are marked 🆓", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("🆓")));
+  check("vision models are marked 👁", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("👁")));
+  check("image-output models are marked 🎨", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("🎨")));
   check("info bar shows pricing", doc.querySelector(".model-info")?.textContent.includes("$"));
   check("shows the empty state", !!doc.querySelector(".empty-state"));
   check("has a composer and send button", !!doc.querySelector("textarea") && !!doc.querySelector(".icon-btn"));
@@ -190,6 +195,27 @@ console.log("\n=== Case D: untrusted content must not inject HTML ===");
   check("injected code did not execute", window.__pwned !== true);
   const href = md?.querySelector("a")?.getAttribute("href") || "";
   check("javascript: URLs are blocked", !href.toLowerCase().startsWith("javascript:"), `href=${href}`);
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
+}
+
+console.log("\n=== Case E: multimodal messages render inline ===");
+{
+  const PIXEL =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const MULTIMODAL = [
+    { type: "text", text: "Here is **the image** I mean:" },
+    { type: "image_url", image_url: { url: PIXEL } },
+  ];
+  const { doc, window, errors, settle } = await render({ authed: true, convContent: MULTIMODAL });
+  doc.querySelector(".conv").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  await settle(20);
+
+  check("renders the attached image inline", !!doc.querySelector(".msg-images img"));
+  check("image points at the stored data URL",
+    doc.querySelector(".msg-images img")?.getAttribute("src") === PIXEL);
+  check("image opens full size in a new tab",
+    doc.querySelector(".msg-images a")?.getAttribute("target") === "_blank");
+  check("text alongside the image still renders as Markdown", !!doc.querySelector(".md strong"));
   check("no runtime errors", errors.length === 0, errors.join(" | "));
 }
 

@@ -179,30 +179,6 @@ select {
 .icon-btn.stop { background: var(--red); }
 .hint { max-width: 800px; margin: 8px auto 0; font-size: 11.5px; color: var(--muted); text-align: center; }
 
-/* ---------- Images ---------- */
-.img-wrap { max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 20px; overflow-y: auto; flex: 1; }
-.img-wrap textarea {
-  width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 12px 14px; font-size: 14.5px; resize: vertical; min-height: 90px; outline: none;
-}
-.img-wrap textarea:focus { border-color: var(--accent); }
-.img-controls { display: flex; gap: 10px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
-.btn-primary {
-  background: var(--accent); border: none; color: #fff; border-radius: 10px;
-  padding: 10px 22px; font-size: 14.5px; font-weight: 600;
-}
-.btn-primary:hover { background: var(--accent-hover); }
-.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-.img-attach { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.img-attach img { height: 64px; border-radius: 6px; border: 1px solid var(--border); }
-.img-results { margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
-.img-item { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
-.img-item .prompt-text { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
-.img-item img { max-width: 100%; border-radius: 8px; display: block; }
-.img-item .actions { margin-top: 10px; display: flex; gap: 8px; }
-.img-item .note { font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
-.error-text { color: var(--red); font-size: 13.5px; }
-
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -313,3 +289,51 @@ select {
 .hljs-deletion { color: #ff6b6b; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
+
+/* ---------- Attachments and inline images ---------- */
+.pane { position: relative; }
+
+.attachments {
+  max-width: 800px; margin: 0 auto 8px; display: flex; gap: 8px; flex-wrap: wrap;
+}
+.attachment { position: relative; }
+.attachment img {
+  height: 68px; width: 68px; object-fit: cover;
+  border-radius: 8px; border: 1px solid var(--border); display: block;
+}
+.attachment-x {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--panel2);
+  color: var(--muted); font-size: 11px; line-height: 1; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.attachment-x:hover { color: #fff; background: var(--red); border-color: var(--red); }
+.attachment-size {
+  position: absolute; bottom: 2px; left: 2px; right: 2px; text-align: center;
+  font-size: 9.5px; color: #dfe4f5; background: rgba(0,0,0,.55);
+  border-radius: 4px; padding: 1px 0;
+}
+
+.attach-btn {
+  width: 34px; height: 34px; flex-shrink: 0; border-radius: 9px;
+  border: 1px solid var(--border); background: transparent; font-size: 15px;
+  display: flex; align-items: center; justify-content: center; align-self: flex-end;
+}
+.attach-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--panel); }
+.attach-btn:disabled { opacity: .35; cursor: not-allowed; }
+.input-bar { padding-left: 8px; }
+
+.msg-images { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.msg-images img {
+  max-width: 320px; max-height: 320px; border-radius: 10px;
+  border: 1px solid var(--border); display: block;
+}
+.msg.user .msg-images img { max-width: 220px; max-height: 220px; }
+
+.drop-overlay {
+  position: absolute; inset: 12px; z-index: 20; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: 16px;
+  background: rgba(108,140,255,.10); backdrop-filter: blur(1px);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 600; color: #c7d3ff;
+}

@@ -32,7 +32,12 @@ export function ModelBar({
         ? new Date(current.created * 1000).toISOString().slice(0, 10)
         : "?";
       const ctx = current.context ? (current.context / 1000).toFixed(0) + "K" : "?";
-      info = `${current.id} · released ${date} · ${ctx} context · ${price}`;
+      const caps = [];
+      if (current.input?.includes("image")) caps.push("👁 reads images");
+      if (current.output?.includes("image")) caps.push("🎨 returns images");
+      info = `${current.id} · released ${date} · ${ctx} context · ${price}${
+        caps.length ? " · " + caps.join(" · ") : ""
+      }`;
     }
   }
 
@@ -54,7 +59,10 @@ export function ModelBar({
       <select value={model} onChange={(e) => onModel(e.target.value)}>
         {models.slice(0, 300).map((m) => (
           <option key={m.id} value={m.id}>
-            {(isFree(m) ? "🆓 " : "") + m.name}
+            {(isFree(m) ? "🆓 " : "") +
+              (m.input?.includes("image") ? "👁 " : "") +
+              (m.output?.includes("image") ? "🎨 " : "") +
+              m.name}
           </option>
         ))}
       </select>

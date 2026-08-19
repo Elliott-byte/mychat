@@ -4,7 +4,6 @@ import { Login } from "./components/Login";
 import { Sidebar } from "./components/Sidebar";
 import { ModelBar, isFree } from "./components/ModelBar";
 import { ChatView } from "./components/ChatView";
-import { ImageView } from "./components/ImageView";
 
 export default function App() {
   const [authed, setAuthed] = useState(null); // null = not determined yet
@@ -16,7 +15,6 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [freeOnly, setFreeOnly] = useState(false);
 
-  const [mode, setMode] = useState("chat");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [conversations, setConversations] = useState([]);
@@ -80,13 +78,23 @@ export default function App() {
   }, [authed, loadModels, loadConversations]);
 
   /* ---------- Model filtering ---------- */
+  // One list for everything: a model is usable if it outputs text or images.
+  // Capability badges (👁 reads images, 🎨 returns them) replace the old tabs.
   const visibleModels = useMemo(() => {
-    let list = (mode === "chat" ? allModels.chat : allModels.image) || [];
+    const byId = new Map();
+    for (const m of [...(allModels.chat || []), ...(allModels.image || [])]) {
+      if (!byId.has(m.id)) byId.set(m.id, m);
+    }
+    let list = [...byId.values()].sort((a, b) => (b.created || 0) - (a.created || 0));
     if (freeOnly) list = list.filter(isFree);
     const q = search.trim().toLowerCase();
     if (q) list = list.filter((m) => (m.id + " " + m.name).toLowerCase().includes(q));
     return list;
-  }, [allModels, mode, freeOnly, search]);
+  }, [allModels, freeOnly, search]);
+
+  const current = visibleModels.find((m) => m.id === model);
+  const supportsVision = Boolean(current?.input?.includes("image"));
+  const supportsImageOut = Boolean(current?.output?.includes("image"));
 
   // If the selected model is filtered out, fall back to the first visible one
   useEffect(() => {
@@ -99,7 +107,6 @@ export default function App() {
     setCurrentId(null);
     setMessages([]);
     setChatError(null);
-    setMode("chat");
     setSidebarOpen(false);
   }
 
@@ -168,6 +175,7 @@ export default function App() {
           model,
           messages: payload,
           conversationId: currentId,
+          wantsImage: supportsImageOut,
           signal: controller.signal,
           onDelta: (d) => {
             full += d;
@@ -205,12 +213,19 @@ export default function App() {
         setStreamingText(null);
       }
     },
-    [model, currentId, loadConversations, showToast]
+    [model, currentId, supportsImageOut, loadConversations, showToast]
   );
 
-  function send(text) {
+  function send(text, images = []) {
     if (!model) return showToast("Pick a model first");
-    const payload = [...messages, { role: "user", content: text }];
+    // Plain string when there is only text; OpenRouter's multimodal array otherwise
+    const content = images.length
+      ? [
+          ...(text ? [{ type: "text", text }] : []),
+          ...images.map((url) => ({ type: "image_url", image_url: { url } })),
+        ]
+      : text;
+    const payload = [...messages, { role: "user", content }];
     setMessages(payload);
     runChat(payload);
   }
@@ -245,11 +260,6 @@ export default function App() {
       {sidebarOpen && <div className="overlay" onClick={() => setSidebarOpen(false)} />}
       <Sidebar
         open={sidebarOpen}
-        mode={mode}
-        onMode={(m) => {
-          setMode(m);
-          setSidebarOpen(false);
-        }}
         conversations={conversations}
         currentId={currentId}
         historyEnabled={historyEnabled}
@@ -280,23 +290,20 @@ export default function App() {
           onMenu={() => setSidebarOpen((v) => !v)}
           status={modelStatus}
         />
-        {mode === "chat" ? (
-          <ChatView
-            messages={messages}
-            streamingText={streamingText}
-            busy={busy}
-            model={model}
-            onSend={send}
-            onStop={stop}
-            onRegenerate={regenerate}
-            onToast={showToast}
-            error={chatError}
-            onRetry={() => chatError && runChat(chatError.payload)}
-            onDismissError={() => setChatError(null)}
-          />
-        ) : (
-          <ImageView model={model} onToast={showToast} />
-        )}
+        <ChatView
+          messages={messages}
+          streamingText={streamingText}
+          busy={busy}
+          model={model}
+          supportsVision={supportsVision}
+          onSend={send}
+          onStop={stop}
+          onRegenerate={regenerate}
+          onToast={showToast}
+          error={chatError}
+          onRetry={() => chatError && runChat(chatError.payload)}
+          onDismissError={() => setChatError(null)}
+        />
       </div>
 
       <div className={"toast" + (toast ? " show" : "")}>{toast}</div>

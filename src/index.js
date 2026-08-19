@@ -250,9 +250,31 @@ async function handleConversation(request, env, id) {
   return json({ error: "Method not allowed" }, 405);
 }
 
-function makeTitle(text) {
+function makeTitle(content) {
+  // content may be a plain string or a multimodal array
+  const text = Array.isArray(content)
+    ? content.filter((p) => p?.type === "text").map((p) => p.text).join(" ")
+    : content;
   const t = String(text || "").replace(/\s+/g, " ").trim();
-  return (t.length > 40 ? t.slice(0, 40) + "…" : t) || "New chat";
+  if (t) return t.length > 40 ? t.slice(0, 40) + "…" : t;
+  return Array.isArray(content) && content.some((p) => p?.type === "image_url")
+    ? "Image conversation"
+    : "New chat";
+}
+
+// D1 caps a row at 2 MB and the free tier gives 500 MB total, so oversized
+// attachments are dropped from what we persist. The message still reaches the
+// model in full — only the stored copy loses its images.
+const MAX_STORED_CONTENT = 1_200_000;
+
+function serializeContent(content) {
+  if (typeof content === "string") return content;
+  const json = JSON.stringify(content);
+  if (json.length <= MAX_STORED_CONTENT) return json;
+  const stripped = content.map((p) =>
+    p?.type === "image_url" ? { type: "text", text: "[image omitted: too large to store]" } : p
+  );
+  return JSON.stringify(stripped);
 }
 
 async function saveMessage(env, convId, role, content, model) {
@@ -260,7 +282,7 @@ async function saveMessage(env, convId, role, content, model) {
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO messages (conversation_id, role, content, model, created_at) VALUES (?, ?, ?, ?, ?)`
-    ).bind(convId, role, content, model || null, now),
+    ).bind(convId, role, serializeContent(content), model || null, now),
     env.DB.prepare(`UPDATE conversations SET updated_at = ?, model = ? WHERE id = ?`).bind(
       now,
       model || null,
@@ -322,11 +344,12 @@ async function handleChat(request, env, ctx) {
   // Call upstream first and only touch the database once it succeeds.
   // Otherwise every rate-limited attempt leaves an orphaned user message
   // in the database with no reply attached to it.
-  const upstream = await fetchUpstreamWithRetry(env, request, {
-    model,
-    messages: body.messages,
-    stream: true,
-  });
+  // When the chosen model can emit images, ask for them alongside text so the
+  // same chat turn can return an edited or generated picture.
+  const payload = { model, messages: body.messages, stream: true };
+  if (body.wantsImage) payload.modalities = ["image", "text"];
+
+  const upstream = await fetchUpstreamWithRetry(env, request, payload);
 
   if (!upstream.ok) {
     const raw = await upstream.text();
@@ -355,7 +378,10 @@ async function handleChat(request, env, ctx) {
         .run();
       createdNew = true;
     }
-    if (lastUser) await saveMessage(env, convId, "user", String(lastUser.content), model);
+    // Pass content through as-is: it may be a string or a multimodal array, and
+    // serializeContent() handles both. Coercing with String() here would turn an
+    // array into "[object Object]".
+    if (lastUser) await saveMessage(env, convId, "user", lastUser.content, model);
   }
 
   const headers = {
@@ -375,6 +401,7 @@ async function handleChat(request, env, ctx) {
 
   const decoder = new TextDecoder();
   let acc = "";
+  let accImages = [];
   let buf = "";
   const collector = new TransformStream({
     transform(chunk, controller) {
@@ -387,15 +414,27 @@ async function handleChat(request, env, ctx) {
         const payload = line.slice(6).trim();
         if (!payload || payload === "[DONE]") continue;
         try {
-          const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
-          if (delta) acc += delta;
+          const delta = JSON.parse(payload)?.choices?.[0]?.delta;
+          if (delta?.content) acc += delta.content;
+          // Image models stream their output as image_url parts
+          for (const img of delta?.images || []) {
+            const url = img?.image_url?.url;
+            if (url) accImages.push(url);
+          }
         } catch {
           /* ignore non-JSON keep-alive lines */
         }
       }
     },
     async flush() {
-      if (acc) await saveMessage(env, convId, "assistant", acc, model);
+      if (!acc && !accImages.length) return;
+      const content = accImages.length
+        ? [
+            ...(acc ? [{ type: "text", text: acc }] : []),
+            ...accImages.map((url) => ({ type: "image_url", image_url: { url } })),
+          ]
+        : acc;
+      await saveMessage(env, convId, "assistant", content, model);
     },
   });
 

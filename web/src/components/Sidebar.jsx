@@ -1,7 +1,5 @@
 export function Sidebar({
   open,
-  mode,
-  onMode,
   conversations,
   currentId,
   historyEnabled,
@@ -19,14 +17,6 @@ export function Sidebar({
         <button className="new-chat" onClick={onNew}>
           ＋ New chat
         </button>
-        <div className="mode-tabs">
-          <button className={mode === "chat" ? "active" : ""} onClick={() => onMode("chat")}>
-            💬 Chat
-          </button>
-          <button className={mode === "image" ? "active" : ""} onClick={() => onMode("image")}>
-            🎨 Images
-          </button>
-        </div>
       </div>
 
       <div className="sb-label">
