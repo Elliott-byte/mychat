@@ -316,7 +316,21 @@ async function handleChat(request, env, ctx) {
   const model = body.model;
   const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
 
-  // 建立/复用会话,并先把用户这条消息落库
+  // 先请求上游 —— 成功了才动数据库。
+  // 否则每次限流失败都会在库里留下一条没有回复的孤儿用户消息。
+  const upstream = await fetchUpstreamWithRetry(env, request, {
+    model,
+    messages: body.messages,
+    stream: true,
+  });
+
+  if (!upstream.ok) {
+    const raw = await upstream.text();
+    const e = describeUpstreamError(upstream.status, raw);
+    return json({ error: e.message, code: upstream.status, retryable: e.retryable }, 502);
+  }
+
+  // 上游已就绪,这时才建立/复用会话并保存用户消息
   let convId = body.conversationId || null;
   let createdNew = false;
   if (env.DB) {
@@ -338,17 +352,6 @@ async function handleChat(request, env, ctx) {
       createdNew = true;
     }
     if (lastUser) await saveMessage(env, convId, "user", String(lastUser.content), model);
-  }
-
-  const upstream = await fetch(`${apiBase(env)}/chat/completions`, {
-    method: "POST",
-    headers: openrouterHeaders(env, request),
-    body: JSON.stringify({ model, messages: body.messages, stream: true }),
-  });
-
-  if (!upstream.ok) {
-    const text = await upstream.text();
-    return json({ error: `OpenRouter 错误 (${upstream.status}): ${text.slice(0, 500)}` }, 502);
   }
 
   const headers = {
@@ -438,6 +441,76 @@ async function handleImage(request, env) {
 // OpenRouter 接口地址。可通过环境变量 OPENROUTER_BASE_URL 指向镜像/代理。
 function apiBase(env) {
   return (env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+}
+
+/**
+ * 请求上游,对「暂时性」失败自动重试。
+ * 免费模型走的是全平台共享额度池,429 非常常见但往往几秒内就能恢复,
+ * 因此这里退避重试几次,避免把一次抖动直接甩给用户。
+ */
+async function fetchUpstreamWithRetry(env, request, payload, attempts = 3) {
+  const backoffMs = [700, 1800]; // 第 1、2 次失败后的等待
+  let resp;
+  for (let i = 0; i < attempts; i++) {
+    resp = await fetch(`${apiBase(env)}/chat/completions`, {
+      method: "POST",
+      headers: openrouterHeaders(env, request),
+      body: JSON.stringify(payload),
+    });
+    if (resp.ok) return resp;
+    // 只重试暂时性错误;4xx(除 429)是配置/参数问题,重试没有意义
+    const transient = resp.status === 429 || resp.status === 502 || resp.status === 503;
+    if (!transient || i === attempts - 1) return resp;
+    await resp.body?.cancel(); // 释放未消费的响应体
+    await sleep(backoffMs[i] ?? 1800);
+  }
+  return resp;
+}
+
+/** 把 OpenRouter 的原始错误 JSON 翻译成一句人话 */
+function describeUpstreamError(status, rawText) {
+  let data = null;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    /* 非 JSON,按原文处理 */
+  }
+  const inner = data?.error || {};
+  const meta = inner.metadata || {};
+  const provider = meta.provider_name ? `(供应商:${meta.provider_name})` : "";
+
+  if (status === 429) {
+    const shared = meta.limit_source === "upstream_provider_shared_pool";
+    return {
+      retryable: true,
+      message: shared
+        ? `该免费模型的共享额度暂时被限流${provider}。这是 OpenRouter 所有用户共用一个池子导致的,和你的配置无关。\n\n可以:稍等片刻重试 · 换一个免费模型 · 或在 OpenRouter 充值后取消勾选「只看免费」使用付费模型(通常几分钱一次)。`
+        : `请求过于频繁,已被限流${provider}。稍等片刻再试。`,
+    };
+  }
+  if (status === 401 || status === 403) {
+    return {
+      retryable: false,
+      message: `OpenRouter 拒绝了这个 API Key(${status})。请确认 OPENROUTER_API_KEY 配置正确且未过期。`,
+    };
+  }
+  if (status === 402) {
+    return {
+      retryable: false,
+      message: "OpenRouter 账户余额不足。请充值,或改用 `:free` 结尾的免费模型。",
+    };
+  }
+  if (status === 404) {
+    return {
+      retryable: false,
+      message: "找不到该模型,它可能已下线。点左下角「⟳ 刷新模型」拉取最新列表。",
+    };
+  }
+  if (status >= 500) {
+    return { retryable: true, message: `上游服务暂时不可用(${status})${provider},稍后重试。` };
+  }
+  const detail = inner.message || rawText.slice(0, 300) || "未知错误";
+  return { retryable: false, message: `OpenRouter 错误 (${status}):${detail}` };
 }
 
 function openrouterHeaders(env, request) {

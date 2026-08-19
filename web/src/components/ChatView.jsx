@@ -23,7 +23,36 @@ function Message({ role, content, model, streaming, onCopy, onRegenerate }) {
   );
 }
 
-export function ChatView({ messages, streamingText, busy, model, onSend, onStop, onRegenerate, onToast }) {
+function ErrorBlock({ error, onRetry, onDismiss }) {
+  return (
+    <div className="chat-error">
+      <div className="chat-error-title">⚠️ 生成失败</div>
+      <div className="chat-error-body">{error.message}</div>
+      <div className="chat-error-acts">
+        <button className="btn-primary" onClick={onRetry}>
+          重试
+        </button>
+        <button className="small-btn" onClick={onDismiss}>
+          关闭
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function ChatView({
+  messages,
+  streamingText,
+  busy,
+  model,
+  onSend,
+  onStop,
+  onRegenerate,
+  onToast,
+  error,
+  onRetry,
+  onDismissError,
+}) {
   const [input, setInput] = useState("");
   const logRef = useRef(null);
   const taRef = useRef(null);
@@ -33,7 +62,7 @@ export function ChatView({ messages, streamingText, busy, model, onSend, onStop,
   useLayoutEffect(() => {
     const el = logRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages, streamingText]);
+  }, [messages, streamingText, error]);
 
   function onScroll() {
     const el = logRef.current;
@@ -59,7 +88,7 @@ export function ChatView({ messages, streamingText, busy, model, onSend, onStop,
     onSend(text);
   }
 
-  const empty = messages.length === 0 && !streamingText;
+  const empty = messages.length === 0 && !streamingText && !error;
 
   return (
     <div className="pane">
@@ -91,6 +120,9 @@ export function ChatView({ messages, streamingText, busy, model, onSend, onStop,
               ))}
               {streamingText !== null && (
                 <Message role="assistant" content={streamingText || "…"} model={model} streaming />
+              )}
+              {error && !busy && (
+                <ErrorBlock error={error} onRetry={onRetry} onDismiss={onDismissError} />
               )}
             </>
           )}

@@ -237,3 +237,15 @@ select {
   select { max-width: 150px; }
   .model-search { width: 90px; }
 }
+
+/* ---------- 生成失败提示 ---------- */
+.chat-error {
+  border: 1px solid rgba(248,113,113,.35); background: rgba(248,113,113,.08);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.chat-error-title { color: #fca5a5; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.chat-error-body {
+  color: #fecaca; font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+}
+.chat-error-acts { display: flex; gap: 8px; margin-top: 12px; }
+.chat-error-acts .btn-primary { padding: 7px 18px; font-size: 13.5px; }

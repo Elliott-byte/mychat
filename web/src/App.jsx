@@ -25,6 +25,8 @@ export default function App() {
 
   const [streamingText, setStreamingText] = useState(null); // null = 未在生成
   const [busy, setBusy] = useState(false);
+  // 出错信息单独存放,不混进 messages —— 否则会被当作助手回复带进下一轮上下文
+  const [chatError, setChatError] = useState(null);
   const abortRef = useRef(null);
 
   const [toast, setToast] = useState("");
@@ -95,6 +97,7 @@ export default function App() {
   function newChat() {
     setCurrentId(null);
     setMessages([]);
+    setChatError(null);
     setMode("chat");
     setSidebarOpen(false);
   }
@@ -104,6 +107,7 @@ export default function App() {
     try {
       const d = await api.conversation(id);
       setCurrentId(id);
+      setChatError(null);
       setMessages((d.messages || []).map((m) => ({ role: m.role, content: m.content, model: m.model })));
       if (d.conversation?.model) setModel(d.conversation.model);
       setSidebarOpen(false);
@@ -147,6 +151,7 @@ export default function App() {
       const controller = new AbortController();
       abortRef.current = controller;
       setBusy(true);
+      setChatError(null);
       setStreamingText("");
 
       let full = "";
@@ -179,10 +184,9 @@ export default function App() {
           else setMessages(payload);
           showToast("已停止生成");
         } else {
-          setMessages([
-            ...payload,
-            { role: "assistant", content: `⚠️ ${err.message}`, model },
-          ]);
+          // 失败时保留用户那条消息(方便重试),但错误本身不进对话上下文
+          setMessages(payload);
+          setChatError({ message: err.message, payload });
         }
       } finally {
         abortRef.current = null;
@@ -275,6 +279,9 @@ export default function App() {
             onStop={stop}
             onRegenerate={regenerate}
             onToast={showToast}
+            error={chatError}
+            onRetry={() => chatError && runChat(chatError.payload)}
+            onDismissError={() => setChatError(null)}
           />
         ) : (
           <ImageView model={model} onToast={showToast} />
