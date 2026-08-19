@@ -21,6 +21,8 @@ A personal AI playground running on Cloudflare Workers' free tier, calling the l
 - **Master password protection** — Only you can use it. Every API route returns 401 without a valid session.
 - **Keys stay secret** — Your OpenRouter API key lives in a Cloudflare Secret, is used only server-side, and never appears in page source or the browser.
 - **Models update themselves** — The model list is fetched live from OpenRouter and sorted newest-first, so new releases show up at the top without any code changes.
+- **ChatGPT-style interface** — Conversation history in a left sidebar, streaming output, stop generation, regenerate, one-click copy.
+- **History stored in the cloud** — Conversations live in Cloudflare D1 (also free), so switching devices shows you the same history.
 - **Chat + images in one place** — Streaming conversations, text-to-image, and image-to-image.
 
 ---
@@ -38,7 +40,8 @@ Cloudflare will:
 3. **Prompt you for two secrets** — this is the important step:
    - `OPENROUTER_API_KEY` — create one at https://openrouter.ai/keys, format `sk-or-v1-...`
    - `MASTER_PASSWORD` — the password you'll log in with. Generate a strong one with `openssl rand -base64 24`
-4. Build, deploy, and wire up CI/CD, so future `git push`es redeploy automatically
+4. **Create a D1 database automatically** (for chat history) and fill in its ID — nothing for you to do
+5. Build, deploy, and wire up CI/CD, so future `git push`es redeploy automatically
 
 When it finishes you'll get a URL like `https://mychat.<your-account>.workers.dev`. Open it, enter your master password, and you're in.
 
@@ -60,8 +63,14 @@ npx wrangler login                            # opens a browser to sign in to Cl
 npx wrangler secret put OPENROUTER_API_KEY    # input is hidden as you type
 npx wrangler secret put MASTER_PASSWORD
 
+# Create the D1 database for history, then paste the printed database_id into wrangler.jsonc
+npx wrangler d1 create mychat-history
+
 npm run deploy
 ```
+
+> The schema is created automatically the first time the Worker runs — no migration step needed.
+> Don't want history? Delete the whole `d1_databases` block from `wrangler.jsonc`. Chat keeps working; it just won't save anything.
 
 ---
 
@@ -93,20 +102,27 @@ nvm alias default 22        # or make it the default once and for all
 
 ## 5. How it works
 
-### 💬 Chat tab
-- The dropdown lists every model that outputs text, **sorted by release date**, newest first
-- Search by name or ID; tick "free only" to show just `:free` and zero-price models
+### 💬 Chat
+- The left sidebar lists your conversation history — click any entry to resume it with full context
+- Titles come from your first message; hover to **rename (✎) or delete (🗑)**
+- Streaming output (typewriter effect). While generating, the button becomes **■ stop**, so you can interrupt at any time
+- Hover any message to **copy** it; assistant messages also offer **↻ regenerate** (drops that reply and everything after it, then answers again)
+- Code blocks get their own **copy** button in the top-right corner
+- The model dropdown is **sorted by release date**, newest first; searchable, with a "free only" filter
 - The info bar shows model ID, release date, context length, and price per million tokens
-- Streaming output (typewriter effect) with multi-turn conversations
-- "Clear chat" resets the context. Switching models does **not** clear history, so you can put the same question to different models back to back
+- Switching models does **not** clear the current conversation, so you can put the same question to different models back to back
+- The input box grows with your text, and scrolling up to read won't yank you back to the bottom
 
-### 🎨 Image tab
+### 🎨 Images
 - Automatically filters to models that **output images** (Nano Banana, GPT-5 Image, and so on)
 - Enter a prompt to generate an image, then download it
 - **Image-to-image** is supported: click "📎 reference image" to attach one or more inputs
 
 ### ⟳ Refresh models
-The model list is cached server-side for one hour and refreshes on its own. Click ⟳ in the header to pull the latest immediately.
+The model list is cached server-side for one hour and refreshes on its own. Click "⟳ refresh models" at the bottom-left to pull the latest immediately.
+
+### 📱 On mobile
+Below 820px the sidebar collapses; tap ☰ at the top-left to open it. History lives in the cloud, so your phone and laptop see the same conversations.
 
 ---
 
@@ -119,6 +135,7 @@ The model list is cached server-side for one hour and refreshes on its own. Clic
 | Session credential | HMAC-SHA256 signed cookie, `HttpOnly` + `Secure` + `SameSite=Strict`, valid 7 days |
 | Password comparison | Constant-time comparison against timing attacks; 1-second delay on failure to slow brute force |
 | Route protection | `/api/models`, `/api/chat`, and `/api/image` all verify the session and return 401 when absent |
+| Chat history | Stored in your own Cloudflare D1, readable and writable only after login, never touching a third party |
 | Search engines | Pages carry `noindex, nofollow` |
 
 All the browser ever sees is the frontend HTML/JS and a session cookie — **never the API key**. Every OpenRouter request is proxied by the Worker.
@@ -133,6 +150,7 @@ All the browser ever sees is the frontend HTML/JS and a session cookie — **nev
 
 - **Cloudflare Workers free tier**: 100,000 requests/day, 10ms CPU time per request (proxying a stream uses almost no CPU)
 - **Static assets**: free, and they don't count toward the request quota
+- **Cloudflare D1** (chat history): free tier includes 5GB storage and 5M row reads / 100K row writes per day
 - **OpenRouter**: models ending in `:free` cost nothing (rate-limited); everything else is pay-as-you-go
 
 Personal use will essentially never reach Cloudflare's free ceiling.
@@ -145,8 +163,8 @@ Personal use will essentially never reach Cloudflare's free ceiling.
 mychat/
 ├── wrangler.jsonc        # Cloudflare configuration
 ├── package.json          # includes cloudflare.bindings — the secret descriptions shown during one-click deploy
-├── src/index.js          # Worker: authentication + OpenRouter proxy
-├── public/index.html     # Single-page frontend (login + chat + images)
+├── src/index.js          # Worker: auth + history (D1) + OpenRouter proxy
+├── public/index.html     # Single-page frontend (login + sidebar + chat + images)
 ├── setup-github.sh       # Push to GitHub and generate your deploy link
 ├── .dev.vars.example     # Source of the secret prompts on deploy; also the local dev template
 └── .gitignore
@@ -154,7 +172,17 @@ mychat/
 
 ---
 
-## 9. Optional: use your own domain
+## 9. Optional: environment variables
+
+| Variable | Type | Notes |
+|---|---|---|
+| `OPENROUTER_API_KEY` | Secret | **Required.** Your OpenRouter key |
+| `MASTER_PASSWORD` | Secret | **Required.** The password you log in with |
+| `OPENROUTER_BASE_URL` | Plain var | Optional. Defaults to `https://openrouter.ai/api/v1`; point it at a mirror or your own proxy if the default is unreachable |
+
+---
+
+## 10. Optional: use your own domain
 
 If your domain is on Cloudflare, add this to `wrangler.jsonc`:
 
