@@ -6,15 +6,18 @@
 	"assets": {
 		"directory": "./dist",
 		"binding": "ASSETS",
-		// 所有请求先经过 Worker,由 Worker 决定是否放行静态资源(用于登录保护)
+		// Every request hits the Worker first so it can gate static assets behind login
 		"run_worker_first": true
 	},
-	// 聊天历史存储。下面的 database_id 是首次部署时 wrangler 自动建库后回写的真实值,
-	// 保留即可(它让后续部署稳定指向同一个库)。
-	// ⚠️ 若要在别的账号重新部署,请把 database_id 整行删掉,让 wrangler 重新自动创建;
-	//    千万不要填占位符 —— wrangler 见到该字段非空就认为「已配置完整」而跳过创建,
-	//    随后把不存在的 ID 发给 API,部署会直接失败(错误码 10021)。需 wrangler ≥ 4.45.0。
-	// 表结构由 Worker 首次运行时自动建立,无需执行 migration。
+	// Chat history. The database_id below is the real value wrangler wrote back
+	// after auto-creating the database on first deploy; keep it so later deploys
+	// keep pointing at the same database.
+	// ⚠️ Deploying to a different account? Delete the database_id line entirely and
+	//    let wrangler provision a new one. Never substitute a placeholder: wrangler
+	//    treats any non-empty value as "fully configured", skips provisioning, and
+	//    ships the nonexistent id to the API, failing the deploy outright (code
+	//    10021). Requires wrangler >= 4.45.0.
+	// The schema is created by the Worker on first run — no migration step needed.
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -22,7 +25,8 @@
 			"database_id": "0e748954-10ee-408d-b68a-7449770bb890"
 		}
 	],
-	// 部署/本地开发前自动跑一次前端构建,CI 与本地都不会漏
+	// Build the frontend before deploy and local dev, so neither CI nor a local
+	// run can ship a stale bundle
 	"build": {
 		"command": "npm run build"
 	},

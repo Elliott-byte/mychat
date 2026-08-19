@@ -27,7 +27,7 @@ input, textarea, select { font-family: inherit; color: var(--text); }
 
 .boot { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); }
 
-/* ---------- 登录 ---------- */
+/* ---------- Login ---------- */
 .login-view { height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .login-card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
@@ -54,11 +54,11 @@ input, textarea, select { font-family: inherit; color: var(--text); }
 }
 .setup-warn b { color: #fecaca; }
 
-/* ---------- 布局 ---------- */
+/* ---------- Layout ---------- */
 .app { height: 100%; display: flex; }
 .overlay { display: none; }
 
-/* ---------- 侧边栏 ---------- */
+/* ---------- Sidebar ---------- */
 .sidebar {
   width: var(--sidebar-w); flex-shrink: 0; background: var(--sidebar);
   border-right: 1px solid var(--border); display: flex; flex-direction: column;
@@ -106,7 +106,7 @@ input, textarea, select { font-family: inherit; color: var(--text); }
 }
 .sb-bottom button:hover { color: var(--text); border-color: var(--accent); }
 
-/* ---------- 主区 ---------- */
+/* ---------- Main area ---------- */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 header {
   display: flex; align-items: center; gap: 10px; padding: 10px 16px;
@@ -131,7 +131,7 @@ select {
 
 .pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
-/* ---------- 聊天 ---------- */
+/* ---------- Chat ---------- */
 .chat-log { flex: 1; overflow-y: auto; padding: 24px 20px; }
 .inner { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 .msg { display: flex; gap: 13px; }
@@ -179,7 +179,7 @@ select {
 .icon-btn.stop { background: var(--red); }
 .hint { max-width: 800px; margin: 8px auto 0; font-size: 11.5px; color: var(--muted); text-align: center; }
 
-/* ---------- 图片 ---------- */
+/* ---------- Images ---------- */
 .img-wrap { max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 20px; overflow-y: auto; flex: 1; }
 .img-wrap textarea {
   width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius);
@@ -203,7 +203,7 @@ select {
 .img-item .note { font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
 .error-text { color: var(--red); font-size: 13.5px; }
 
-/* ---------- 提示条 ---------- */
+/* ---------- Toast ---------- */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: var(--panel2); border: 1px solid var(--border); color: var(--text);
@@ -224,7 +224,7 @@ select {
   .model-search { width: 90px; }
 }
 
-/* ---------- 生成失败提示 ---------- */
+/* ---------- Generation error ---------- */
 .chat-error {
   border: 1px solid rgba(248,113,113,.35); background: rgba(248,113,113,.08);
   border-radius: var(--radius); padding: 14px 16px;
@@ -263,21 +263,21 @@ select {
 .md del { color: var(--muted); }
 .md img { max-width: 100%; border-radius: 8px; }
 
-/* 行内代码 */
+/* Inline code */
 .md :not(pre) > code {
   background: rgba(110,140,255,.13); color: #b9c6ff;
   padding: 2px 6px; border-radius: 5px; font-size: .88em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* 表格 */
+/* Tables */
 .table-wrap { overflow-x: auto; margin: 12px 0; }
 .md table { border-collapse: collapse; font-size: 13.5px; width: 100%; }
 .md th, .md td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
 .md th { background: var(--panel2); font-weight: 600; }
 .md tbody tr:nth-child(even) { background: rgba(255,255,255,.02); }
 
-/* 代码块 */
+/* Code blocks */
 .code-block {
   margin: 12px 0; border: 1px solid var(--border); border-radius: 10px;
   overflow: hidden; background: #0b0d13;
@@ -301,7 +301,7 @@ select {
   background: none; padding: 0; color: #d6deeb;
 }
 
-/* 语法高亮配色(highlight.js 类名,深色主题) */
+/* Syntax highlighting palette (highlight.js class names, dark theme) */
 .hljs-comment, .hljs-quote { color: #6b7a99; font-style: italic; }
 .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #c792ea; }
 .hljs-string, .hljs-regexp, .hljs-addition { color: #a3e28b; }

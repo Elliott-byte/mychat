@@ -1,6 +1,6 @@
-// 在 jsdom 里跑真实构建产物,验证 React 应用能挂载、关键界面能渲染、
-// Markdown 能正确解析,以及不可信内容不会被注入为 HTML。
-// 这些是「构建成功」无法保证的东西。
+// Run the real build output inside jsdom to verify the React app mounts, the
+// key screens render, Markdown parses correctly, and untrusted content never
+// reaches the DOM as HTML. A successful build guarantees none of this.
 import { JSDOM } from "jsdom";
 import fs from "node:fs";
 import path from "node:path";
@@ -23,26 +23,26 @@ const MODELS = {
 };
 
 const MD_SAMPLE = [
-  "# 一级标题",
-  "## 二级标题",
-  "普通段落,含 **粗体**、*斜体*、~~删除线~~ 和 `行内代码`。",
+  "# Heading one",
+  "## Heading two",
+  "A paragraph with **bold**, *italics*, ~~strikethrough~~ and `inline code`.",
   "",
-  "- 无序项 A",
-  "- 无序项 B",
+  "- Bullet A",
+  "- Bullet B",
   "",
-  "1. 有序项一",
-  "2. 有序项二",
+  "1. First",
+  "2. Second",
   "",
-  "- [x] 已完成任务",
-  "- [ ] 未完成任务",
+  "- [x] Done task",
+  "- [ ] Pending task",
   "",
-  "> 这是一段引用",
+  "> A blockquote",
   "",
-  "| 模型 | 价格 |",
+  "| Model | Price |",
   "|---|---|",
-  "| GPT | 便宜 |",
+  "| GPT | Cheap |",
   "",
-  "[链接文字](https://example.com)",
+  "[Link text](https://example.com)",
   "",
   "```python",
   "def hello(name):",
@@ -50,17 +50,17 @@ const MD_SAMPLE = [
   "```",
   "",
   "```",
-  "没有语言标注的代码块",
+  "a fenced block with no language",
   "```",
   "",
   "---",
 ].join("\n");
 
-// 模型可能返回恶意 HTML;必须当作纯文本显示,不能进入 DOM
+// A model may return malicious HTML. It must render as plain text, never as DOM.
 const EVIL_MD = [
   '<script data-xss>window.__pwned = true;</script>',
   '<img src=x onerror="window.__pwned = true">',
-  "[点我](javascript:window.__pwned=true)",
+  "[click me](javascript:window.__pwned=true)",
 ].join("\n\n");
 
 async function render({ authed, convContent = MD_SAMPLE }) {
@@ -88,15 +88,15 @@ async function render({ authed, convContent = MD_SAMPLE }) {
     if (u === "/api/models") return json({ updatedAt: 1, ...MODELS });
     if (u.startsWith("/api/conversations/")) {
       return json({
-        conversation: { id: "c1", title: "第一个对话", model: "x/fast" },
+        conversation: { id: "c1", title: "First conversation", model: "x/fast" },
         messages: [{ role: "assistant", content: convContent, model: "x/fast" }],
       });
     }
     if (u === "/api/conversations") {
       return json({
         conversations: [
-          { id: "c1", title: "第一个对话", model: "x/fast", updated_at: 2, message_count: 2 },
-          { id: "c2", title: "第二个对话", model: "y/free:free", updated_at: 1, message_count: 4 },
+          { id: "c1", title: "First conversation", model: "x/fast", updated_at: 2, message_count: 2 },
+          { id: "c2", title: "Second conversation", model: "y/free:free", updated_at: 1, message_count: 4 },
         ],
       });
     }
@@ -118,80 +118,80 @@ const check = (label, cond, extra = "") => {
   if (!cond) failures++;
 };
 
-console.log("=== 场景 A:未登录 ===");
+console.log("=== Case A: signed out ===");
 {
   const { doc, errors } = await render({ authed: false });
-  check("无运行时错误", errors.length === 0, errors.join(" | "));
-  check("渲染登录卡片", !!doc.querySelector(".login-card"));
-  check("有密码输入框", !!doc.querySelector('input[type="password"]'));
-  check("未渲染主界面", !doc.querySelector(".sidebar"));
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
+  check("renders the login card", !!doc.querySelector(".login-card"));
+  check("has a password field", !!doc.querySelector('input[type="password"]'));
+  check("does not render the main UI", !doc.querySelector(".sidebar"));
 }
 
-console.log("\n=== 场景 B:已登录 ===");
+console.log("\n=== Case B: signed in ===");
 {
   const { doc, errors } = await render({ authed: true });
   const txt = doc.body.textContent;
-  check("无运行时错误", errors.length === 0, errors.join(" | "));
-  check("渲染侧边栏", !!doc.querySelector(".sidebar"));
-  check("历史列表渲染 2 条", doc.querySelectorAll(".conv").length === 2, `实际 ${doc.querySelectorAll(".conv").length}`);
-  check("历史标题正确", txt.includes("第一个对话") && txt.includes("第二个对话"));
-  check("模型下拉框已填充", doc.querySelectorAll("select option").length === 2);
-  check("免费模型带 🆓 标记", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("🆓")));
-  check("模型信息栏显示价格", doc.querySelector(".model-info")?.textContent.includes("$"));
-  check("显示空状态提示", !!doc.querySelector(".empty-state"));
-  check("有输入框与发送按钮", !!doc.querySelector("textarea") && !!doc.querySelector(".icon-btn"));
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
+  check("renders the sidebar", !!doc.querySelector(".sidebar"));
+  check("lists 2 conversations", doc.querySelectorAll(".conv").length === 2, `got ${doc.querySelectorAll(".conv").length}`);
+  check("conversation titles are correct", txt.includes("First conversation") && txt.includes("Second conversation"));
+  check("model dropdown is populated", doc.querySelectorAll("select option").length === 2);
+  check("free models are marked 🆓", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("🆓")));
+  check("info bar shows pricing", doc.querySelector(".model-info")?.textContent.includes("$"));
+  check("shows the empty state", !!doc.querySelector(".empty-state"));
+  check("has a composer and send button", !!doc.querySelector("textarea") && !!doc.querySelector(".icon-btn"));
 }
 
-console.log("\n=== 场景 C:Markdown 渲染(点开历史对话) ===");
+console.log("\n=== Case C: Markdown rendering (opening a past conversation) ===");
 {
   const { doc, window, errors, settle } = await render({ authed: true });
   doc.querySelector(".conv").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   await settle(20);
 
   const md = doc.querySelector(".md");
-  check("加载并渲染了消息", !!md, "未找到 .md 容器");
+  check("loaded and rendered the message", !!md, ".md container not found");
   if (md) {
-    check("渲染 h1", !!md.querySelector("h1"));
-    check("渲染 h2", !!md.querySelector("h2"));
-    check("渲染粗体", !!md.querySelector("strong"));
-    check("渲染斜体", !!md.querySelector("em"));
-    check("渲染删除线(GFM)", !!md.querySelector("del"));
-    check("渲染行内代码", !!md.querySelector("p code"));
-    check("渲染无序列表", !!md.querySelector("ul li"));
-    check("渲染有序列表", !!md.querySelector("ol li"));
-    check("渲染任务列表(GFM)", !!md.querySelector('input[type="checkbox"]'));
-    check("渲染引用", !!md.querySelector("blockquote"));
-    check("渲染表格(GFM)", !!md.querySelector("table th"));
-    check("表格有横向滚动容器", !!md.querySelector(".table-wrap"));
-    check("渲染分隔线", !!md.querySelector("hr"));
+    check("renders h1", !!md.querySelector("h1"));
+    check("renders h2", !!md.querySelector("h2"));
+    check("renders bold", !!md.querySelector("strong"));
+    check("renders italics", !!md.querySelector("em"));
+    check("renders strikethrough (GFM)", !!md.querySelector("del"));
+    check("renders inline code", !!md.querySelector("p code"));
+    check("renders unordered lists", !!md.querySelector("ul li"));
+    check("renders ordered lists", !!md.querySelector("ol li"));
+    check("renders task lists (GFM)", !!md.querySelector('input[type="checkbox"]'));
+    check("renders blockquotes", !!md.querySelector("blockquote"));
+    check("renders tables (GFM)", !!md.querySelector("table th"));
+    check("tables get a scroll container", !!md.querySelector(".table-wrap"));
+    check("renders horizontal rules", !!md.querySelector("hr"));
     const a = md.querySelector("a");
-    check("渲染链接", !!a);
-    check("链接新标签打开且带 noopener",
+    check("renders links", !!a);
+    check("links open in a new tab with noopener",
       a?.getAttribute("target") === "_blank" && (a?.getAttribute("rel") || "").includes("noopener"));
-    check("代码块数量为 2", md.querySelectorAll(".code-block").length === 2,
-      `实际 ${md.querySelectorAll(".code-block").length}`);
-    check("代码块有复制按钮", !!md.querySelector(".code-block .copy-code"));
-    check("代码块标注语言 python", md.querySelector(".code-lang")?.textContent === "python");
-    check("语法高亮已生效",
+    check("renders 2 code blocks", md.querySelectorAll(".code-block").length === 2,
+      `got ${md.querySelectorAll(".code-block").length}`);
+    check("code blocks have a copy button", !!md.querySelector(".code-block .copy-code"));
+    check("code block is labelled python", md.querySelector(".code-lang")?.textContent === "python");
+    check("syntax highlighting applied",
       !!md.querySelector("pre code .hljs-keyword, pre code .hljs-string, pre code .hljs-title, pre code .hljs-built_in"));
   }
-  check("无运行时错误", errors.length === 0, errors.join(" | "));
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
 }
 
-console.log("\n=== 场景 D:不可信内容不得注入 HTML ===");
+console.log("\n=== Case D: untrusted content must not inject HTML ===");
 {
   const { doc, window, errors, settle } = await render({ authed: true, convContent: EVIL_MD });
   doc.querySelector(".conv").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   await settle(20);
 
   const md = doc.querySelector(".md");
-  check("恶意 script 未进入 DOM", !doc.querySelector("script[data-xss]"));
-  check("恶意 img 未进入 DOM", !doc.querySelector('img[src="x"]'));
-  check("未触发注入的代码", window.__pwned !== true);
+  check("malicious script never reaches the DOM", !doc.querySelector("script[data-xss]"));
+  check("malicious img never reaches the DOM", !doc.querySelector('img[src="x"]'));
+  check("injected code did not execute", window.__pwned !== true);
   const href = md?.querySelector("a")?.getAttribute("href") || "";
-  check("javascript: 链接已被拦截", !href.toLowerCase().startsWith("javascript:"), `href=${href}`);
-  check("无运行时错误", errors.length === 0, errors.join(" | "));
+  check("javascript: URLs are blocked", !href.toLowerCase().startsWith("javascript:"), `href=${href}`);
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
 }
 
-console.log(failures === 0 ? "\n🎉 全部通过" : `\n💥 ${failures} 项失败`);
+console.log(failures === 0 ? "\n🎉 All checks passed" : `\n💥 ${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

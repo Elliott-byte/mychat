@@ -5,12 +5,12 @@ export default defineConfig({
   root: "web",
   plugins: [react()],
   build: {
-    // 构建产物给 wrangler 当静态资源用(见 wrangler.jsonc 的 assets.directory)
+    // Output is served by wrangler as static assets (see assets.directory in wrangler.jsonc)
     outDir: "../dist",
     emptyOutDir: true,
   },
   server: {
-    // 只用于 `npm run dev:ui` 的热更新开发:把 /api 转发给本地 wrangler
+    // Used only by `npm run dev:ui` for hot reload: proxy /api to the local wrangler
     proxy: {
       "/api": "http://127.0.0.1:8787",
     },

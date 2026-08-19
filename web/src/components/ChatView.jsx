@@ -6,15 +6,15 @@ function Message({ role, content, model, streaming, onCopy, onRegenerate }) {
     <div className={"msg " + role}>
       <div className="avatar">{role === "user" ? "🧑" : "🤖"}</div>
       <div className="body">
-        <div className="who">{role === "user" ? "我" : model || "AI"}</div>
+        <div className="who">{role === "user" ? "You" : model || "AI"}</div>
         <div className={"bubble" + (streaming ? " cursor" : "")}>
           <Markdown text={content} />
         </div>
         {!streaming && (
           <div className="msg-acts">
-            <button onClick={onCopy}>📋 复制</button>
+            <button onClick={onCopy}>📋 Copy</button>
             {role === "assistant" && onRegenerate && (
-              <button onClick={onRegenerate}>↻ 重新生成</button>
+              <button onClick={onRegenerate}>↻ Regenerate</button>
             )}
           </div>
         )}
@@ -26,14 +26,14 @@ function Message({ role, content, model, streaming, onCopy, onRegenerate }) {
 function ErrorBlock({ error, onRetry, onDismiss }) {
   return (
     <div className="chat-error">
-      <div className="chat-error-title">⚠️ 生成失败</div>
+      <div className="chat-error-title">⚠️ Generation failed</div>
       <div className="chat-error-body">{error.message}</div>
       <div className="chat-error-acts">
         <button className="btn-primary" onClick={onRetry}>
-          重试
+          Retry
         </button>
         <button className="small-btn" onClick={onDismiss}>
-          关闭
+          Dismiss
         </button>
       </div>
     </div>
@@ -56,9 +56,10 @@ export function ChatView({
   const [input, setInput] = useState("");
   const logRef = useRef(null);
   const taRef = useRef(null);
-  const stickRef = useRef(true); // 用户是否贴着底部(决定要不要自动滚动)
+  const stickRef = useRef(true); // whether the user is pinned to the bottom
 
-  // 只在用户本来就在底部时才自动跟随,避免翻看历史时被拽走
+  // Only follow along when already at the bottom, so scrolling back to read
+  // never yanks the view down
   useLayoutEffect(() => {
     const el = logRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
@@ -98,9 +99,9 @@ export function ChatView({
             <div className="empty-state">
               <h2>MyChat</h2>
               <p>
-                选一个模型,开始对话。
+                Pick a model and start chatting.
                 <br />
-                模型列表每小时自动更新,最新的排在最前面。
+                The model list refreshes hourly, newest first.
               </p>
             </div>
           ) : (
@@ -113,7 +114,7 @@ export function ChatView({
                   model={m.model || model}
                   onCopy={() => {
                     navigator.clipboard.writeText(m.content);
-                    onToast("已复制");
+                    onToast("Copied");
                   }}
                   onRegenerate={m.role === "assistant" ? () => onRegenerate(i) : undefined}
                 />
@@ -142,17 +143,17 @@ export function ChatView({
                 submit();
               }
             }}
-            placeholder="给 AI 发消息…"
+            placeholder="Message the model…"
           />
           <button
             className={"icon-btn" + (busy ? " stop" : "")}
             onClick={submit}
-            title={busy ? "停止生成" : "发送"}
+            title={busy ? "Stop generating" : "Send"}
           >
             {busy ? "■" : "↑"}
           </button>
         </div>
-        <div className="hint">Enter 发送 · Shift+Enter 换行 · 历史自动保存</div>
+        <div className="hint">Enter to send · Shift+Enter for a new line · history saves automatically</div>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
   "name": "mychat",
   "version": "1.0.0",
   "private": true,
-  "description": "私人 AI 试用台 — Cloudflare Workers + OpenRouter,支持最新模型自动更新",
+  "description": "A private AI playground — Cloudflare Workers + OpenRouter, with a self-updating model list",
   "scripts": {
     "build": "vite build",
     "dev": "wrangler dev",
@@ -13,7 +13,7 @@
     "secret:pass": "wrangler secret put MASTER_PASSWORD"
   },
   "cloudflare": {
-    "label": "MyChat — 私人 AI 试用台",
+    "label": "MyChat — private AI playground",
     "products": [
       "Workers"
     ],
@@ -23,10 +23,10 @@
     "docs_url": "https://github.com/Elliott-byte/mychat#readme",
     "bindings": {
       "OPENROUTER_API_KEY": {
-        "description": "你的 OpenRouter API Key。到 [openrouter.ai/keys](https://openrouter.ai/keys) 创建,格式形如 `sk-or-v1-...`。它只保存在服务端,永远不会发送到浏览器。"
+        "description": "Your OpenRouter API key. Create one at [openrouter.ai/keys](https://openrouter.ai/keys); it looks like `sk-or-v1-...`. It is stored server-side only and never reaches the browser."
       },
       "MASTER_PASSWORD": {
-        "description": "登录本站的主密码,**只有你知道**。请用强密码(建议 16 位以上随机字符),可以用 `openssl rand -base64 24` 生成。"
+        "description": "The master password for signing in — **only you should know it**. Use something strong (16+ random characters); `openssl rand -base64 24` will generate one."
       }
     }
   },

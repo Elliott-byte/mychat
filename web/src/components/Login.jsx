@@ -7,7 +7,8 @@ export function Login({ onSuccess }) {
   const [missing, setMissing] = useState([]);
   const [busy, setBusy] = useState(false);
 
-  // 一键部署后若漏配密钥,直接在登录页提示,不必去翻构建日志
+  // Surface a missing secret right on the login screen after a one-click deploy,
+  // so nobody has to dig through build logs to find out
   useEffect(() => {
     api
       .setup()
@@ -38,16 +39,16 @@ export function Login({ onSuccess }) {
     <div className="login-view">
       <form className="login-card" onSubmit={submit}>
         <h1>🔐 MyChat</h1>
-        <p>私人 AI 试用台 · 请输入主密码</p>
+        <p>Private AI playground · enter your master password</p>
 
         {missing.length > 0 && (
           <div className="setup-warn">
-            ⚠️ <b>部署尚未完成</b>
+            ⚠️ <b>Setup incomplete</b>
             <br />
-            缺少密钥:<b>{missing.join("、")}</b>
+            Missing secret(s): <b>{missing.join(", ")}</b>
             <br />
-            请到 Cloudflare 控制台 → Workers &amp; Pages → mychat → Settings → Variables and
-            Secrets 添加(类型选 Secret),然后重新部署。
+            Add them under Cloudflare dashboard → Workers &amp; Pages → mychat → Settings →
+            Variables and Secrets (choose type <b>Secret</b>), then redeploy.
           </div>
         )}
 
@@ -55,12 +56,12 @@ export function Login({ onSuccess }) {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="主密码"
+          placeholder="Master password"
           autoComplete="current-password"
           autoFocus
         />
         <button type="submit" disabled={busy}>
-          {busy ? "验证中…" : "进入"}
+          {busy ? "Signing in…" : "Enter"}
         </button>
         <div className="login-error">{error}</div>
       </form>

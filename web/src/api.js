@@ -1,5 +1,5 @@
-// 与 Worker 后端通信的薄封装。所有请求都带 Cookie(会话凭证),
-// 密钥全在服务端,前端永远拿不到。
+// Thin client for the Worker backend. Every request carries the session cookie;
+// secrets stay server-side and never reach the browser.
 
 async function req(path, options = {}) {
   const r = await fetch(path, {
@@ -8,7 +8,7 @@ async function req(path, options = {}) {
   });
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
-    throw new Error(d.error || `请求失败 (${r.status})`);
+    throw new Error(d.error || `Request failed (${r.status})`);
   }
   return r.json();
 }
@@ -42,7 +42,7 @@ export const api = {
 
   image: (body) => req("/api/image", { method: "POST", body: JSON.stringify(body) }),
 
-  // 流式聊天:逐块回调,返回本轮的会话 ID
+  // Streaming chat: fires onDelta per chunk, resolves with this turn's conversation id
   async chatStream({ model, messages, conversationId, signal, onDelta }) {
     const r = await fetch("/api/chat", {
       method: "POST",
@@ -52,7 +52,7 @@ export const api = {
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      throw new Error(d.error || `请求失败 (${r.status})`);
+      throw new Error(d.error || `Request failed (${r.status})`);
     }
 
     const convId = r.headers.get("X-Conversation-Id");
@@ -75,9 +75,9 @@ export const api = {
         try {
           j = JSON.parse(payload);
         } catch {
-          continue; // 忽略心跳等非 JSON 行
+          continue; // ignore keep-alive and other non-JSON lines
         }
-        if (j.error) throw new Error(j.error.message || "上游返回错误");
+        if (j.error) throw new Error(j.error.message || "Upstream returned an error");
         const delta = j.choices?.[0]?.delta?.content;
         if (delta) onDelta(delta);
       }

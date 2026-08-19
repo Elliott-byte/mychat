@@ -1,19 +1,21 @@
 /**
- * MyChat — 个人 AI 试用站(Cloudflare Workers 免费版)
+ * MyChat — a personal AI playground on the Cloudflare Workers free tier.
  *
- * 安全设计:
- * - OPENROUTER_API_KEY 与 MASTER_PASSWORD 均存放于 Cloudflare Secrets,
- *   永远不会发送到浏览器端。
- * - 登录后签发 HMAC-SHA256 签名的会话 Cookie(HttpOnly + Secure + SameSite=Strict)。
- * - 密码比较使用恒定时间算法,失败时延迟响应以减缓暴力破解。
+ * Security model:
+ * - OPENROUTER_API_KEY and MASTER_PASSWORD live in Cloudflare Secrets and are
+ *   never sent to the browser.
+ * - Login issues an HMAC-SHA256 signed session cookie
+ *   (HttpOnly + Secure + SameSite=Strict).
+ * - Passwords are compared in constant time, and failures are delayed to slow
+ *   down brute-force attempts.
  *
- * 聊天历史存于 D1(绑定名 DB),表结构首次运行自动建立。
- * 未绑定 D1 时全站仍可正常聊天,只是不保存历史(优雅降级)。
+ * Chat history lives in D1 (binding: DB); the schema is created on first run.
+ * Without a D1 binding the app still works, it just doesn't persist anything.
  */
 
 const SESSION_COOKIE = "mychat_session";
-const SESSION_TTL_SECONDS = 7 * 24 * 3600; // 7 天
-const MODELS_CACHE_SECONDS = 3600; // 模型列表缓存 1 小时,自动更新
+const SESSION_TTL_SECONDS = 7 * 24 * 3600; // 7 days
+const MODELS_CACHE_SECONDS = 3600; // model list is cached for an hour, then refreshes itself
 
 export default {
   async fetch(request, env, ctx) {
@@ -25,7 +27,7 @@ export default {
       );
     }
 
-    // 静态页面(仅登录界面与 UI,不含任何密钥)
+    // Static assets: the login screen and UI only, never any secret
     return env.ASSETS.fetch(request);
   },
 };
@@ -37,7 +39,7 @@ async function handleApi(request, url, env, ctx) {
     case "/api/logout":
       return handleLogout();
     case "/api/setup":
-      // 供登录页检测部署后是否漏配密钥(不泄露任何密钥内容)
+      // Lets the login page report a missing secret after deploy (never leaks values)
       return json({
         hasPassword: Boolean(env.MASTER_PASSWORD),
         hasApiKey: Boolean(env.OPENROUTER_API_KEY),
@@ -48,18 +50,18 @@ async function handleApi(request, url, env, ctx) {
         : json({ ok: false }, 401);
   }
 
-  // 以下端点全部需要登录
+  // Everything below requires a session
   if (!(await isAuthed(request, env))) {
-    return json({ error: "未登录" }, 401);
+    return json({ error: "Not signed in" }, 401);
   }
 
   if (url.pathname === "/api/models") return handleModels(request, env, ctx);
   if (url.pathname === "/api/chat") return handleChat(request, env, ctx);
   if (url.pathname === "/api/image") return handleImage(request, env);
 
-  // 历史记录:/api/conversations 及 /api/conversations/<id>
+  // History: /api/conversations and /api/conversations/<id>
   if (url.pathname.startsWith("/api/conversations")) {
-    if (!env.DB) return json({ error: "未绑定 D1 数据库,历史功能不可用" }, 503);
+    if (!env.DB) return json({ error: "No D1 database bound; history is unavailable" }, 503);
     await ensureSchema(env);
     const id = url.pathname.slice("/api/conversations".length).replace(/^\//, "");
     return id ? handleConversation(request, env, id) : handleConversationList(request, env);
@@ -68,10 +70,11 @@ async function handleApi(request, url, env, ctx) {
   return json({ error: "Not found" }, 404);
 }
 
-/* ---------------- 认证 ---------------- */
+/* ---------------- Authentication ---------------- */
 
 async function hmacKey(env) {
-  // 用主密码派生 HMAC 密钥(个人站点足够;换密码 = 所有会话失效)
+  // Derive the HMAC key from the master password. Good enough for a personal
+  // site, and changing the password invalidates every existing session.
   const material = new TextEncoder().encode(env.MASTER_PASSWORD + "|mychat-session-v1");
   const digest = await crypto.subtle.digest("SHA-256", material);
   return crypto.subtle.importKey("raw", digest, { name: "HMAC", hash: "SHA-256" }, false, [
@@ -117,15 +120,15 @@ async function handleLogin(request, env) {
     return json(
       {
         error:
-          "尚未配置 MASTER_PASSWORD。请到 Cloudflare 控制台 → Workers & Pages → mychat → Settings → Variables and Secrets 添加,或运行 npx wrangler secret put MASTER_PASSWORD",
+          "MASTER_PASSWORD is not configured. Add it under Cloudflare dashboard → Workers & Pages → mychat → Settings → Variables and Secrets, or run: npx wrangler secret put MASTER_PASSWORD",
       },
       500
     );
   }
   const { password } = await request.json().catch(() => ({}));
   if (typeof password !== "string" || !timingSafeEqual(password, env.MASTER_PASSWORD)) {
-    await sleep(1000); // 减缓暴力破解
-    return json({ error: "密码错误" }, 401);
+    await sleep(1000); // slow down brute force
+    return json({ error: "Incorrect password" }, 401);
   }
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
   const token = await signSession(env, expiresAt);
@@ -152,7 +155,7 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
-/* ---------------- 历史记录(D1) ---------------- */
+/* ---------------- History (D1) ---------------- */
 
 let schemaReady = false;
 
@@ -201,7 +204,7 @@ async function handleConversationList(request, env) {
   }
 
   if (request.method === "DELETE") {
-    // 清空全部历史
+    // Wipe all history
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM messages`),
       env.DB.prepare(`DELETE FROM conversations`),
@@ -215,7 +218,7 @@ async function handleConversationList(request, env) {
 async function handleConversation(request, env, id) {
   if (request.method === "GET") {
     const conv = await env.DB.prepare(`SELECT * FROM conversations WHERE id = ?`).bind(id).first();
-    if (!conv) return json({ error: "对话不存在" }, 404);
+    if (!conv) return json({ error: "Conversation not found" }, 404);
     const { results } = await env.DB.prepare(
       `SELECT role, content, model, created_at FROM messages
         WHERE conversation_id = ? ORDER BY id ASC`
@@ -228,7 +231,7 @@ async function handleConversation(request, env, id) {
   if (request.method === "PATCH") {
     const { title } = await request.json().catch(() => ({}));
     if (typeof title !== "string" || !title.trim()) {
-      return json({ error: "标题不能为空" }, 400);
+      return json({ error: "Title cannot be empty" }, 400);
     }
     await env.DB.prepare(`UPDATE conversations SET title = ? WHERE id = ?`)
       .bind(title.trim().slice(0, 200), id)
@@ -249,7 +252,7 @@ async function handleConversation(request, env, id) {
 
 function makeTitle(text) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
-  return (t.length > 40 ? t.slice(0, 40) + "…" : t) || "新对话";
+  return (t.length > 40 ? t.slice(0, 40) + "…" : t) || "New chat";
 }
 
 async function saveMessage(env, convId, role, content, model) {
@@ -266,7 +269,7 @@ async function saveMessage(env, convId, role, content, model) {
   ]);
 }
 
-/* ---------------- 模型列表(自动更新) ---------------- */
+/* ---------------- Model list (self-updating) ---------------- */
 
 async function handleModels(request, env, ctx) {
   const cache = caches.default;
@@ -277,7 +280,7 @@ async function handleModels(request, env, ctx) {
   const resp = await fetch(`${apiBase(env)}/models`, {
     headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}` },
   });
-  if (!resp.ok) return json({ error: `OpenRouter 模型列表获取失败 (${resp.status})` }, 502);
+  if (!resp.ok) return json({ error: `Could not fetch the OpenRouter model list (${resp.status})` }, 502);
   const { data } = await resp.json();
 
   const models = (data || [])
@@ -292,7 +295,7 @@ async function handleModels(request, env, ctx) {
       completionPrice: Number(m.pricing?.completion ?? 0),
       imagePrice: Number(m.pricing?.image ?? 0),
     }))
-    .sort((a, b) => (b.created || 0) - (a.created || 0)); // 最新模型排最前
+    .sort((a, b) => (b.created || 0) - (a.created || 0)); // newest models first
 
   const chat = models.filter((m) => m.output.includes("text"));
   const image = models.filter((m) => m.output.includes("image"));
@@ -304,20 +307,21 @@ async function handleModels(request, env, ctx) {
   return out;
 }
 
-/* ---------------- 聊天(流式 + 落库) ---------------- */
+/* ---------------- Chat (streaming + persistence) ---------------- */
 
 async function handleChat(request, env, ctx) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const body = await request.json().catch(() => null);
   if (!body?.model || !Array.isArray(body?.messages) || !body.messages.length) {
-    return json({ error: "参数错误:需要 model 和 messages" }, 400);
+    return json({ error: "Bad request: model and messages are required" }, 400);
   }
 
   const model = body.model;
   const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
 
-  // 先请求上游 —— 成功了才动数据库。
-  // 否则每次限流失败都会在库里留下一条没有回复的孤儿用户消息。
+  // Call upstream first and only touch the database once it succeeds.
+  // Otherwise every rate-limited attempt leaves an orphaned user message
+  // in the database with no reply attached to it.
   const upstream = await fetchUpstreamWithRetry(env, request, {
     model,
     messages: body.messages,
@@ -330,7 +334,7 @@ async function handleChat(request, env, ctx) {
     return json({ error: e.message, code: upstream.status, retryable: e.retryable }, 502);
   }
 
-  // 上游已就绪,这时才建立/复用会话并保存用户消息
+  // Upstream is ready: now create or reuse the conversation and save the message
   let convId = body.conversationId || null;
   let createdNew = false;
   if (env.DB) {
@@ -364,7 +368,7 @@ async function handleChat(request, env, ctx) {
     headers["Access-Control-Expose-Headers"] = "X-Conversation-Id, X-Conversation-New";
   }
 
-  // 边转发边累积助手回复,流结束后写入数据库
+  // Forward the stream while accumulating the reply, then persist it once done
   if (!env.DB || !convId) {
     return new Response(upstream.body, { headers });
   }
@@ -374,7 +378,7 @@ async function handleChat(request, env, ctx) {
   let buf = "";
   const collector = new TransformStream({
     transform(chunk, controller) {
-      controller.enqueue(chunk); // 原样透传,不影响前端实时性
+      controller.enqueue(chunk); // pass through untouched so the UI stays live
       buf += decoder.decode(chunk, { stream: true });
       const lines = buf.split("\n");
       buf = lines.pop() || "";
@@ -386,7 +390,7 @@ async function handleChat(request, env, ctx) {
           const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
           if (delta) acc += delta;
         } catch {
-          /* 忽略非 JSON 的心跳行 */
+          /* ignore non-JSON keep-alive lines */
         }
       }
     },
@@ -398,16 +402,16 @@ async function handleChat(request, env, ctx) {
   return new Response(upstream.body.pipeThrough(collector), { headers });
 }
 
-/* ---------------- 图片生成 ---------------- */
+/* ---------------- Image generation ---------------- */
 
 async function handleImage(request, env) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const body = await request.json().catch(() => null);
   if (!body?.model || !body?.prompt) {
-    return json({ error: "参数错误:需要 model 和 prompt" }, 400);
+    return json({ error: "Bad request: model and prompt are required" }, 400);
   }
 
-  // 支持图生图:附带用户上传的图片(data URL)
+  // Image-to-image: attach the user's uploaded images as data URLs
   const content = body.images?.length
     ? [
         { type: "text", text: body.prompt },
@@ -428,7 +432,7 @@ async function handleImage(request, env) {
   const data = await upstream.json().catch(() => null);
   if (!upstream.ok) {
     const msg = data?.error?.message || JSON.stringify(data)?.slice(0, 500);
-    return json({ error: `OpenRouter 错误 (${upstream.status}): ${msg}` }, 502);
+    return json({ error: `OpenRouter error (${upstream.status}): ${msg}` }, 502);
   }
 
   const message = data?.choices?.[0]?.message;
@@ -436,20 +440,21 @@ async function handleImage(request, env) {
   return json({ images, text: message?.content || "" });
 }
 
-/* ---------------- 工具函数 ---------------- */
+/* ---------------- Helpers ---------------- */
 
-// OpenRouter 接口地址。可通过环境变量 OPENROUTER_BASE_URL 指向镜像/代理。
+// OpenRouter endpoint. Point OPENROUTER_BASE_URL at a mirror or proxy if needed.
 function apiBase(env) {
   return (env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
 }
 
 /**
- * 请求上游,对「暂时性」失败自动重试。
- * 免费模型走的是全平台共享额度池,429 非常常见但往往几秒内就能恢复,
- * 因此这里退避重试几次,避免把一次抖动直接甩给用户。
+ * Call upstream, retrying transient failures.
+ * Free models draw on a pool shared by every OpenRouter user, so 429s are
+ * common but usually clear within seconds. Backing off a few times keeps a
+ * momentary blip from surfacing to the user as an error.
  */
 async function fetchUpstreamWithRetry(env, request, payload, attempts = 3) {
-  const backoffMs = [700, 1800]; // 第 1、2 次失败后的等待
+  const backoffMs = [700, 1800]; // waits after the 1st and 2nd failure
   let resp;
   for (let i = 0; i < attempts; i++) {
     resp = await fetch(`${apiBase(env)}/chat/completions`, {
@@ -458,59 +463,60 @@ async function fetchUpstreamWithRetry(env, request, payload, attempts = 3) {
       body: JSON.stringify(payload),
     });
     if (resp.ok) return resp;
-    // 只重试暂时性错误;4xx(除 429)是配置/参数问题,重试没有意义
+    // Retry only transient failures. A 4xx other than 429 means a bad request
+    // or bad config, and retrying it would never help.
     const transient = resp.status === 429 || resp.status === 502 || resp.status === 503;
     if (!transient || i === attempts - 1) return resp;
-    await resp.body?.cancel(); // 释放未消费的响应体
+    await resp.body?.cancel(); // release the unconsumed body
     await sleep(backoffMs[i] ?? 1800);
   }
   return resp;
 }
 
-/** 把 OpenRouter 的原始错误 JSON 翻译成一句人话 */
+/** Turn OpenRouter's raw error JSON into one plain-English sentence */
 function describeUpstreamError(status, rawText) {
   let data = null;
   try {
     data = JSON.parse(rawText);
   } catch {
-    /* 非 JSON,按原文处理 */
+    /* not JSON; fall back to the raw text */
   }
   const inner = data?.error || {};
   const meta = inner.metadata || {};
-  const provider = meta.provider_name ? `(供应商:${meta.provider_name})` : "";
+  const provider = meta.provider_name ? ` (provider: ${meta.provider_name})` : "";
 
   if (status === 429) {
     const shared = meta.limit_source === "upstream_provider_shared_pool";
     return {
       retryable: true,
       message: shared
-        ? `该免费模型的共享额度暂时被限流${provider}。这是 OpenRouter 所有用户共用一个池子导致的,和你的配置无关。\n\n可以:稍等片刻重试 · 换一个免费模型 · 或在 OpenRouter 充值后取消勾选「只看免费」使用付费模型(通常几分钱一次)。`
-        : `请求过于频繁,已被限流${provider}。稍等片刻再试。`,
+        ? `This free model's shared quota is rate-limited right now${provider}. Every OpenRouter user draws on the same pool, so this is not a problem with your setup.\n\nYou can wait a moment and retry, switch to a different free model, or add credit to OpenRouter and untick "Free only" to use paid models (usually a fraction of a cent per message).`
+        : `Too many requests, so you have been rate-limited${provider}. Try again shortly.`,
     };
   }
   if (status === 401 || status === 403) {
     return {
       retryable: false,
-      message: `OpenRouter 拒绝了这个 API Key(${status})。请确认 OPENROUTER_API_KEY 配置正确且未过期。`,
+      message: `OpenRouter rejected this API key (${status}). Check that OPENROUTER_API_KEY is correct and has not expired.`,
     };
   }
   if (status === 402) {
     return {
       retryable: false,
-      message: "OpenRouter 账户余额不足。请充值,或改用 `:free` 结尾的免费模型。",
+      message: "Your OpenRouter account is out of credit. Add funds, or switch to a model ending in `:free`.",
     };
   }
   if (status === 404) {
     return {
       retryable: false,
-      message: "找不到该模型,它可能已下线。点左下角「⟳ 刷新模型」拉取最新列表。",
+      message: "Model not found — it may have been retired. Click \"⟳ Refresh models\" at the bottom left to pull the current list.",
     };
   }
   if (status >= 500) {
-    return { retryable: true, message: `上游服务暂时不可用(${status})${provider},稍后重试。` };
+    return { retryable: true, message: `Upstream is temporarily unavailable (${status})${provider}. Try again shortly.` };
   }
-  const detail = inner.message || rawText.slice(0, 300) || "未知错误";
-  return { retryable: false, message: `OpenRouter 错误 (${status}):${detail}` };
+  const detail = inner.message || rawText.slice(0, 300) || "Unknown error";
+  return { retryable: false, message: `OpenRouter error (${status}): ${detail}` };
 }
 
 function openrouterHeaders(env, request) {

@@ -21,18 +21,18 @@ export function ModelBar({
   let info = status;
   if (!info) {
     if (!current) {
-      info = "无匹配模型";
+      info = "No matching model";
     } else {
       const price = isFree(current)
-        ? "免费"
-        : `输入 $${(current.promptPrice * 1e6).toFixed(2)}/M · 输出 $${(
+        ? "Free"
+        : `in $${(current.promptPrice * 1e6).toFixed(2)}/M · out $${(
             current.completionPrice * 1e6
           ).toFixed(2)}/M`;
       const date = current.created
         ? new Date(current.created * 1000).toISOString().slice(0, 10)
         : "?";
       const ctx = current.context ? (current.context / 1000).toFixed(0) + "K" : "?";
-      info = `${current.id} · 上线 ${date} · 上下文 ${ctx} · ${price}`;
+      info = `${current.id} · released ${date} · ${ctx} context · ${price}`;
     }
   }
 
@@ -45,11 +45,11 @@ export function ModelBar({
         className="model-search"
         value={search}
         onChange={(e) => onSearch(e.target.value)}
-        placeholder="搜索模型…"
+        placeholder="Search models…"
       />
       <label className="chk">
         <input type="checkbox" checked={freeOnly} onChange={(e) => onFreeOnly(e.target.checked)} />
-        只看免费
+        Free only
       </label>
       <select value={model} onChange={(e) => onModel(e.target.value)}>
         {models.slice(0, 300).map((m) => (

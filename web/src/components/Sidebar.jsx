@@ -17,23 +17,23 @@ export function Sidebar({
     <aside className={"sidebar" + (open ? " open" : "")}>
       <div className="sb-top">
         <button className="new-chat" onClick={onNew}>
-          ＋ 新对话
+          ＋ New chat
         </button>
         <div className="mode-tabs">
           <button className={mode === "chat" ? "active" : ""} onClick={() => onMode("chat")}>
-            💬 对话
+            💬 Chat
           </button>
           <button className={mode === "image" ? "active" : ""} onClick={() => onMode("image")}>
-            🎨 图片
+            🎨 Images
           </button>
         </div>
       </div>
 
       <div className="sb-label">
-        <span>历史记录</span>
+        <span>History</span>
         {historyEnabled && conversations.length > 0 && (
-          <button onClick={onClearAll} title="删除全部历史">
-            清空
+          <button onClick={onClearAll} title="Delete all history">
+            Clear
           </button>
         )}
       </div>
@@ -41,15 +41,15 @@ export function Sidebar({
       <div className="conv-list">
         {!historyEnabled ? (
           <div className="conv-empty">
-            未绑定 D1 数据库,
+            No D1 database bound —
             <br />
-            本次对话不会被保存。
+            this conversation will not be saved.
           </div>
         ) : conversations.length === 0 ? (
           <div className="conv-empty">
-            还没有历史对话
+            No conversations yet
             <br />
-            发一条消息试试
+            send a message to start one
           </div>
         ) : (
           conversations.map((c) => (
@@ -62,7 +62,7 @@ export function Sidebar({
               <span className="t">{c.title}</span>
               <span className="acts">
                 <button
-                  title="重命名"
+                  title="Rename"
                   onClick={(e) => {
                     e.stopPropagation();
                     onRename(c);
@@ -71,7 +71,7 @@ export function Sidebar({
                   ✎
                 </button>
                 <button
-                  title="删除"
+                  title="Delete"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(c);
@@ -86,8 +86,8 @@ export function Sidebar({
       </div>
 
       <div className="sb-bottom">
-        <button onClick={onRefreshModels}>⟳ 刷新模型</button>
-        <button onClick={onLogout}>退出登录</button>
+        <button onClick={onRefreshModels}>⟳ Refresh models</button>
+        <button onClick={onLogout}>Sign out</button>
       </div>
     </aside>
   );

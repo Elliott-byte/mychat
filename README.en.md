@@ -8,6 +8,8 @@
 
 A personal AI playground running on Cloudflare Workers' free tier, calling the latest chat and image models through OpenRouter.
 
+> The interface and source are in English; this documentation is available in both English and Chinese.
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Elliott-byte/mychat)
 
 > 👆 **Click the button to deploy in one step.** Cloudflare will prompt you for

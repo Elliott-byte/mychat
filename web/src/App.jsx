@@ -7,7 +7,7 @@ import { ChatView } from "./components/ChatView";
 import { ImageView } from "./components/ImageView";
 
 export default function App() {
-  const [authed, setAuthed] = useState(null); // null = 尚未确定
+  const [authed, setAuthed] = useState(null); // null = not determined yet
   const [historyEnabled, setHistoryEnabled] = useState(false);
 
   const [allModels, setAllModels] = useState({ chat: [], image: [] });
@@ -23,9 +23,10 @@ export default function App() {
   const [currentId, setCurrentId] = useState(null);
   const [messages, setMessages] = useState([]);
 
-  const [streamingText, setStreamingText] = useState(null); // null = 未在生成
+  const [streamingText, setStreamingText] = useState(null); // null = not generating
   const [busy, setBusy] = useState(false);
-  // 出错信息单独存放,不混进 messages —— 否则会被当作助手回复带进下一轮上下文
+  // Errors live outside `messages`. Folding them in would send the error text
+  // back to the model as if it were an assistant turn.
   const [chatError, setChatError] = useState(null);
   const abortRef = useRef(null);
 
@@ -37,7 +38,7 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(""), 1800);
   }, []);
 
-  /* ---------- 启动:确认登录态 ---------- */
+  /* ---------- Startup: determine session state ---------- */
   useEffect(() => {
     api.me().then((d) => {
       if (d?.ok) {
@@ -49,15 +50,15 @@ export default function App() {
     });
   }, []);
 
-  /* ---------- 登录后加载模型与历史 ---------- */
+  /* ---------- After login: load models and history ---------- */
   const loadModels = useCallback(async () => {
-    setModelStatus("正在加载模型列表…");
+    setModelStatus("Loading models…");
     try {
       const d = await api.models();
       setAllModels({ chat: d.chat || [], image: d.image || [] });
       setModelStatus("");
     } catch (err) {
-      setModelStatus("模型列表加载失败:" + err.message);
+      setModelStatus("Could not load models: " + err.message);
     }
   }, []);
 
@@ -67,7 +68,7 @@ export default function App() {
       const d = await api.conversations();
       setConversations(d.conversations || []);
     } catch {
-      /* 静默:侧边栏会显示空态 */
+      /* Silent: the sidebar shows its empty state */
     }
   }, [historyEnabled]);
 
@@ -78,7 +79,7 @@ export default function App() {
     }
   }, [authed, loadModels, loadConversations]);
 
-  /* ---------- 模型筛选 ---------- */
+  /* ---------- Model filtering ---------- */
   const visibleModels = useMemo(() => {
     let list = (mode === "chat" ? allModels.chat : allModels.image) || [];
     if (freeOnly) list = list.filter(isFree);
@@ -87,13 +88,13 @@ export default function App() {
     return list;
   }, [allModels, mode, freeOnly, search]);
 
-  // 当前选中的模型若已不在筛选结果里,自动落到第一个
+  // If the selected model is filtered out, fall back to the first visible one
   useEffect(() => {
     if (!visibleModels.length) return;
     if (!visibleModels.some((m) => m.id === model)) setModel(visibleModels[0].id);
   }, [visibleModels, model]);
 
-  /* ---------- 会话操作 ---------- */
+  /* ---------- Conversation actions ---------- */
   function newChat() {
     setCurrentId(null);
     setMessages([]);
@@ -103,7 +104,7 @@ export default function App() {
   }
 
   async function openConv(id) {
-    if (busy) return showToast("请先停止当前生成");
+    if (busy) return showToast("Stop the current generation first");
     try {
       const d = await api.conversation(id);
       setCurrentId(id);
@@ -112,12 +113,12 @@ export default function App() {
       if (d.conversation?.model) setModel(d.conversation.model);
       setSidebarOpen(false);
     } catch {
-      showToast("打开对话失败");
+      showToast("Could not open that conversation");
     }
   }
 
   async function renameConv(c) {
-    const title = prompt("重命名对话:", c.title);
+    const title = prompt("Rename conversation:", c.title);
     if (title === null || !title.trim()) return;
     try {
       await api.renameConversation(c.id, title);
@@ -130,22 +131,22 @@ export default function App() {
   }
 
   async function deleteConv(c) {
-    if (!confirm(`删除对话「${c.title}」?此操作不可恢复。`)) return;
+    if (!confirm(`Delete "${c.title}"? This cannot be undone.`)) return;
     await api.deleteConversation(c.id);
     setConversations((list) => list.filter((x) => x.id !== c.id));
     if (currentId === c.id) newChat();
-    showToast("已删除");
+    showToast("Deleted");
   }
 
   async function clearAll() {
-    if (!confirm(`确定删除全部 ${conversations.length} 条历史对话?此操作不可恢复。`)) return;
+    if (!confirm(`Delete all ${conversations.length} conversations? This cannot be undone.`)) return;
     await api.clearConversations();
     setConversations([]);
     newChat();
-    showToast("历史已清空");
+    showToast("History cleared");
   }
 
-  /* ---------- 发送 / 流式接收 ---------- */
+  /* ---------- Sending and receiving the stream ---------- */
   const runChat = useCallback(
     async (payload) => {
       const controller = new AbortController();
@@ -155,8 +156,8 @@ export default function App() {
       setStreamingText("");
 
       let full = "";
-      // 每个 token 都重新解析一遍 Markdown 会卡,这里节流到约 60ms 一次。
-      // 视觉上仍是流式打字,但解析次数降到十分之一。
+      // Re-parsing Markdown on every token is slow, so updates are throttled to
+      // roughly 60ms. It still reads as live typing, at a tenth of the parses.
       let flushTimer = null;
       const flush = () => {
         flushTimer = null;
@@ -175,7 +176,7 @@ export default function App() {
         });
         clearTimeout(flushTimer);
         if (convId) setCurrentId(convId);
-        setMessages([...payload, { role: "assistant", content: full || "(模型返回了空响应)", model }]);
+        setMessages([...payload, { role: "assistant", content: full || "(the model returned an empty response)", model }]);
         if (isNew) loadConversations();
         else
           setConversations((list) => {
@@ -188,12 +189,13 @@ export default function App() {
       } catch (err) {
         clearTimeout(flushTimer);
         if (err.name === "AbortError") {
-          // 已生成的部分保留下来,不白费
+          // Keep whatever was generated rather than discarding it
           if (full) setMessages([...payload, { role: "assistant", content: full, model }]);
           else setMessages(payload);
-          showToast("已停止生成");
+          showToast("Stopped");
         } else {
-          // 失败时保留用户那条消息(方便重试),但错误本身不进对话上下文
+          // Keep the user's message so retrying is easy, but keep the error
+          // itself out of the conversation context
           setMessages(payload);
           setChatError({ message: err.message, payload });
         }
@@ -207,7 +209,7 @@ export default function App() {
   );
 
   function send(text) {
-    if (!model) return showToast("请先选择模型");
+    if (!model) return showToast("Pick a model first");
     const payload = [...messages, { role: "user", content: text }];
     setMessages(payload);
     runChat(payload);
@@ -218,14 +220,14 @@ export default function App() {
   }
 
   function regenerate(index) {
-    if (busy) return showToast("正在生成中");
-    const payload = messages.slice(0, index); // 丢弃该条助手回复及其之后的内容
+    if (busy) return showToast("Already generating");
+    const payload = messages.slice(0, index); // drop this reply and everything after it
     setMessages(payload);
     runChat(payload);
   }
 
-  /* ---------- 渲染 ---------- */
-  if (authed === null) return <div className="boot">载入中…</div>;
+  /* ---------- Render ---------- */
+  if (authed === null) return <div className="boot">Loading…</div>;
   if (!authed)
     return (
       <Login
@@ -258,7 +260,7 @@ export default function App() {
         onClearAll={clearAll}
         onRefreshModels={() => {
           loadModels();
-          showToast("正在刷新模型列表…");
+          showToast("Refreshing models…");
         }}
         onLogout={async () => {
           await api.logout();
