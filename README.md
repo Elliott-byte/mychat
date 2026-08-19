@@ -4,8 +4,8 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Elliott-byte/mychat)
 
-> 👆 点击按钮即可一键部署。部署过程中会提示你填写 OpenRouter Key 和主密码。
-> **把上面链接里的 `YOUR_GITHUB_USERNAME` 换成你自己的 GitHub 用户名。**
+> 👆 **点这个按钮即可一键部署。** 部署过程中 Cloudflare 会提示你填写
+> `OPENROUTER_API_KEY` 和 `MASTER_PASSWORD`,填完自动构建上线,不需要任何命令行操作。
 
 ---
 
@@ -21,23 +21,11 @@
 
 ## 一、一键部署(推荐)
 
-### 步骤 1:推到你自己的 GitHub
+直接点本文顶部的 **Deploy to Cloudflare** 按钮,或访问:
 
-跑这一条命令就够了 —— 它会自动替换按钮里的用户名占位符、初始化 git、创建公开仓库并推送:
+<https://deploy.workers.cloudflare.com/?url=https://github.com/Elliott-byte/mychat>
 
-```bash
-./setup-github.sh 你的GitHub用户名
-```
-
-> 一键部署按钮要求仓库是**公开的**(Cloudflare 需要读取它)。
-> 本项目不含任何密钥(`.dev.vars` 已被 `.gitignore` 排除),公开是安全的。
-> 脚本在推送前也会再检查一遍,发现 `.dev.vars` 被跟踪会直接中止。
-
-没装 [`gh`](https://cli.github.com/) 的话,脚本会提示你手动建仓库后再 push,照做即可。
-
-### 步骤 2:点按钮
-
-回到 GitHub 上的仓库首页,点击 **Deploy to Cloudflare** 按钮。Cloudflare 会:
+Cloudflare 会:
 
 1. 让你登录 Cloudflare 账号(没有就免费注册)
 2. 把仓库 fork 到你的 GitHub
@@ -57,7 +45,7 @@
 ## 二、命令行部署(不想用 GitHub 的话)
 
 ```bash
-cd /Users/elliott/repos/mychat
+git clone https://github.com/Elliott-byte/mychat.git && cd mychat
 nvm use 22                                    # wrangler 需要 Node 22+
 
 npm install
