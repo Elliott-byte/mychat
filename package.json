@@ -4,15 +4,22 @@
   "private": true,
   "description": "私人 AI 试用台 — Cloudflare Workers + OpenRouter,支持最新模型自动更新",
   "scripts": {
+    "build": "vite build",
     "dev": "wrangler dev",
+    "dev:ui": "vite",
     "deploy": "wrangler deploy",
+    "test": "npm run build && node test/smoke.mjs",
     "secret:key": "wrangler secret put OPENROUTER_API_KEY",
     "secret:pass": "wrangler secret put MASTER_PASSWORD"
   },
   "cloudflare": {
     "label": "MyChat — 私人 AI 试用台",
-    "products": ["Workers"],
-    "categories": ["ai"],
+    "products": [
+      "Workers"
+    ],
+    "categories": [
+      "ai"
+    ],
     "docs_url": "https://github.com/Elliott-byte/mychat#readme",
     "bindings": {
       "OPENROUTER_API_KEY": {
@@ -24,7 +31,13 @@
     }
   },
   "devDependencies": {
-    "// wrangler": "必须 ≥4.45.0:D1 自动创建(省去手填 database_id)从该版本起默认开启",
+    "@vitejs/plugin-react": "^6.0.5",
+    "jsdom": "^29.1.1",
+    "vite": "^8.2.1",
     "wrangler": "^4.45.0"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }

@@ -24,6 +24,7 @@ A personal AI playground running on Cloudflare Workers' free tier, calling the l
 - **ChatGPT-style interface** — Conversation history in a left sidebar, streaming output, stop generation, regenerate, one-click copy.
 - **History stored in the cloud** — Conversations live in Cloudflare D1 (also free), so switching devices shows you the same history.
 - **Chat + images in one place** — Streaming conversations, text-to-image, and image-to-image.
+- **React frontend** — React 19 + Vite, component-based, and the build is only 66KB gzipped.
 
 ---
 
@@ -82,10 +83,23 @@ npm run deploy    # creates the D1 database for history automatically
 cp .dev.vars.example .dev.vars
 # edit .dev.vars and fill in your real key and password
 nvm use 22
-npm run dev
+npm install
+npm run dev          # builds the frontend, starts the Worker at http://localhost:8787
 ```
 
-Open http://localhost:8787 . `.dev.vars` is listed in `.gitignore`, so it will never be committed.
+For hot reload while working on the UI, open a second terminal:
+
+```bash
+npm run dev:ui       # Vite dev server; /api is proxied to the wrangler process above
+```
+
+Run the tests (builds, then verifies in jsdom that the React app mounts and renders):
+
+```bash
+npm test
+```
+
+Both `.dev.vars` and `dist/` are in `.gitignore`, so neither is ever committed.
 
 ---
 
@@ -195,15 +209,28 @@ Personal use will essentially never reach Cloudflare's free ceiling.
 
 ```
 mychat/
-├── wrangler.jsonc        # Cloudflare configuration
-├── package.json          # includes cloudflare.bindings — the secret descriptions shown during one-click deploy
-├── src/index.js          # Worker: auth + history (D1) + OpenRouter proxy
-├── public/index.html     # Single-page frontend (login + sidebar + chat + images)
-├── setup-github.sh       # Push to GitHub and generate your deploy link
-├── sync-deploy.sh        # Sync updates into the clone the deploy button made, triggering a redeploy
-├── .dev.vars.example     # Source of the secret prompts on deploy; also the local dev template
-└── .gitignore
+├── wrangler.jsonc            # Cloudflare config (D1 binding + frontend build command)
+├── vite.config.mjs           # Vite config: web/ → dist/
+├── package.json              # includes cloudflare.bindings — the secret prompts on one-click deploy
+├── src/index.js              # Worker: auth + history (D1) + OpenRouter proxy
+├── web/                      # React frontend source
+│   ├── index.html
+│   └── src/
+│       ├── main.jsx          # entry point
+│       ├── App.jsx           # global state and orchestration
+│       ├── api.js            # backend client (including stream parsing)
+│       ├── markdown.jsx      # minimal Markdown renderer (no third-party deps)
+│       ├── styles.css
+│       └── components/       # Login / Sidebar / ModelBar / ChatView / ImageView
+├── test/smoke.mjs            # jsdom smoke test: asserts the app mounts and renders
+├── setup-github.sh           # Push to GitHub and generate your deploy link
+├── sync-deploy.sh            # Sync updates into a clone made by the deploy button
+├── .dev.vars.example         # Source of the secret prompts on deploy; also the local dev template
+└── .gitignore                # excludes dist/ and .dev.vars
 ```
+
+> The frontend build is wired through `build.command` in `wrangler.jsonc`, so `wrangler deploy`
+> runs `npm run build` first. Cloudflare's cloud builds need **no extra configuration**.
 
 ---
 

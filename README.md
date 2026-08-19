@@ -24,6 +24,7 @@
 - **ChatGPT 式界面** — 左侧历史记录侧边栏,流式输出、停止生成、重新生成、一键复制
 - **历史云端保存** — 对话存在 Cloudflare D1(同样免费),换设备打开还是同一份记录
 - **对话 + 图片** — 流式对话、文生图、图生图,一个站全包
+- **React 前端** — React 19 + Vite 组件化开发,构建产物仅 66KB(gzip)
 
 ---
 
@@ -82,10 +83,23 @@ npm run deploy    # 会自动创建存历史的 D1 数据库
 cp .dev.vars.example .dev.vars
 # 编辑 .dev.vars 填入真实的 Key 和密码
 nvm use 22
-npm run dev
+npm install
+npm run dev          # 自动构建前端 + 启动 Worker,访问 http://localhost:8787
 ```
 
-访问 http://localhost:8787 。`.dev.vars` 已在 `.gitignore` 中,不会被提交。
+改前端想要热更新的话,再开一个终端:
+
+```bash
+npm run dev:ui       # Vite 开发服务器,/api 自动转发给上面的 wrangler
+```
+
+跑测试(构建 + 在 jsdom 里验证 React 应用能正常挂载渲染):
+
+```bash
+npm test
+```
+
+`.dev.vars` 和 `dist/` 都在 `.gitignore` 中,不会被提交。
 
 ---
 
@@ -195,15 +209,28 @@ nvm alias default 22        # 或设为默认,一劳永逸
 
 ```
 mychat/
-├── wrangler.jsonc        # Cloudflare 配置
-├── package.json          # 含 cloudflare.bindings,用于一键部署时的密钥说明
-├── src/index.js          # Worker:认证 + 历史记录(D1)+ OpenRouter 代理
-├── public/index.html     # 前端单页(登录 + 侧边栏 + 对话 + 图片)
-├── setup-github.sh       # 一键推送到 GitHub 并生成部署链接
-├── sync-deploy.sh        # 把更新同步到一键部署克隆出的仓库,触发自动重新部署
-├── .dev.vars.example     # 一键部署据此提示填写密钥;也是本地开发模板
-└── .gitignore
+├── wrangler.jsonc            # Cloudflare 配置(含 D1 绑定与前端构建命令)
+├── vite.config.mjs           # Vite 配置:web/ → dist/
+├── package.json              # 含 cloudflare.bindings,用于一键部署时的密钥说明
+├── src/index.js              # Worker:认证 + 历史记录(D1)+ OpenRouter 代理
+├── web/                      # React 前端源码
+│   ├── index.html
+│   └── src/
+│       ├── main.jsx          # 入口
+│       ├── App.jsx           # 全局状态与编排
+│       ├── api.js            # 后端接口封装(含流式解析)
+│       ├── markdown.jsx      # 极简 Markdown 渲染(无第三方依赖)
+│       ├── styles.css
+│       └── components/       # Login / Sidebar / ModelBar / ChatView / ImageView
+├── test/smoke.mjs            # jsdom 冒烟测试:验证应用能挂载并正确渲染
+├── setup-github.sh           # 一键推送到 GitHub 并生成部署链接
+├── sync-deploy.sh            # 把更新同步到一键部署克隆出的仓库
+├── .dev.vars.example         # 一键部署据此提示填写密钥;也是本地开发模板
+└── .gitignore                # 已排除 dist/ 与 .dev.vars
 ```
+
+> 前端构建由 `wrangler.jsonc` 的 `build.command` 触发,`wrangler deploy` 会自动先跑
+> `npm run build`,所以 Cloudflare 云端构建**不需要额外配置**。
 
 ---
 
