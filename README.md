@@ -227,7 +227,7 @@ mychat/
 │       ├── api.js            # 后端接口封装(含流式解析)
 │       ├── markdown.jsx      # Markdown 渲染(react-markdown + GFM + lowlight 高亮)
 │       ├── styles.css
-│       └── components/       # Login / Sidebar / ModelBar / ChatView / ImageView
+│       └── components/       # Login / Sidebar / ModelBar / ChatView
 ├── test/smoke.mjs            # jsdom 冒烟测试:验证应用能挂载并正确渲染
 ├── setup-github.sh           # 一键推送到 GitHub 并生成部署链接
 ├── sync-deploy.sh            # 把更新同步到一键部署克隆出的仓库

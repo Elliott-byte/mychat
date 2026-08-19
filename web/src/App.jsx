@@ -5,15 +5,27 @@ import { Sidebar } from "./components/Sidebar";
 import { ModelBar, isFree } from "./components/ModelBar";
 import { ChatView } from "./components/ChatView";
 
+// Remember the few choices that would otherwise reset on every page load.
+// Nothing sensitive goes in here — just a model id and a checkbox.
+const PREFS_KEY = "mychat.prefs";
+function loadPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
 export default function App() {
+  const prefs = useRef(loadPrefs()).current;
   const [authed, setAuthed] = useState(null); // null = not determined yet
   const [historyEnabled, setHistoryEnabled] = useState(false);
 
   const [allModels, setAllModels] = useState({ chat: [], image: [] });
   const [modelStatus, setModelStatus] = useState("");
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(prefs.model || "");
   const [search, setSearch] = useState("");
-  const [freeOnly, setFreeOnly] = useState(false);
+  const [freeOnly, setFreeOnly] = useState(Boolean(prefs.freeOnly));
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -96,11 +108,21 @@ export default function App() {
   const supportsVision = Boolean(current?.input?.includes("image"));
   const supportsImageOut = Boolean(current?.output?.includes("image"));
 
-  // If the selected model is filtered out, fall back to the first visible one
+  // If the selected model is filtered out (or was never set), fall back to the
+  // first visible one. A remembered model that no longer exists lands here too.
   useEffect(() => {
     if (!visibleModels.length) return;
     if (!visibleModels.some((m) => m.id === model)) setModel(visibleModels[0].id);
   }, [visibleModels, model]);
+
+  // Persist the choices worth keeping across reloads
+  useEffect(() => {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ model, freeOnly }));
+    } catch {
+      /* private mode or a full quota — not worth surfacing */
+    }
+  }, [model, freeOnly]);
 
   /* ---------- Conversation actions ---------- */
   function newChat() {

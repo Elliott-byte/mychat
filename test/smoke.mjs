@@ -63,7 +63,7 @@ const EVIL_MD = [
   "[click me](javascript:window.__pwned=true)",
 ].join("\n\n");
 
-async function render({ authed, convContent = MD_SAMPLE }) {
+async function render({ authed, convContent = MD_SAMPLE, prefs = null }) {
   const dom = new JSDOM(fs.readFileSync(path.join(DIST, "index.html"), "utf8"), {
     runScripts: "outside-only",
     url: "https://mychat.test/",
@@ -104,6 +104,8 @@ async function render({ authed, convContent = MD_SAMPLE }) {
   };
   window.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
   Object.defineProperty(window.navigator, "clipboard", { value: { writeText: async () => {} }, configurable: true });
+
+  if (prefs) window.localStorage.setItem("mychat.prefs", JSON.stringify(prefs));
 
   window.eval(bundle);
   const settle = async (n = 40) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 25)); };
@@ -216,6 +218,24 @@ console.log("\n=== Case E: multimodal messages render inline ===");
   check("image opens full size in a new tab",
     doc.querySelector(".msg-images a")?.getAttribute("target") === "_blank");
   check("text alongside the image still renders as Markdown", !!doc.querySelector(".md strong"));
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
+}
+
+console.log("\n=== Case F: preferences survive a reload ===");
+{
+  // A remembered model should be reselected instead of defaulting to the newest
+  const { doc, errors } = await render({ authed: true, prefs: { model: "y/free:free", freeOnly: true } });
+  check("remembered model is reselected", doc.querySelector("select")?.value === "y/free:free",
+    `got ${doc.querySelector("select")?.value}`);
+  check("remembered 'free only' filter is applied", doc.querySelector('input[type="checkbox"]')?.checked === true);
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
+}
+
+console.log("\n=== Case G: a stale remembered model falls back cleanly ===");
+{
+  const { doc, errors } = await render({ authed: true, prefs: { model: "gone/retired-model" } });
+  const v = doc.querySelector("select")?.value;
+  check("falls back to a real model", !!v && v !== "gone/retired-model", `got ${v}`);
   check("no runtime errors", errors.length === 0, errors.join(" | "));
 }
 

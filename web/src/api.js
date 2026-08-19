@@ -40,8 +40,6 @@ export const api = {
 
   clearConversations: () => req("/api/conversations", { method: "DELETE" }),
 
-  image: (body) => req("/api/image", { method: "POST", body: JSON.stringify(body) }),
-
   // Streaming chat: fires onDelta per chunk, resolves with this turn's conversation id
   async chatStream({ model, messages, conversationId, signal, onDelta }) {
     const r = await fetch("/api/chat", {

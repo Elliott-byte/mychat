@@ -57,7 +57,6 @@ async function handleApi(request, url, env, ctx) {
 
   if (url.pathname === "/api/models") return handleModels(request, env, ctx);
   if (url.pathname === "/api/chat") return handleChat(request, env, ctx);
-  if (url.pathname === "/api/image") return handleImage(request, env);
 
   // History: /api/conversations and /api/conversations/<id>
   if (url.pathname.startsWith("/api/conversations")) {
@@ -439,44 +438,6 @@ async function handleChat(request, env, ctx) {
   });
 
   return new Response(upstream.body.pipeThrough(collector), { headers });
-}
-
-/* ---------------- Image generation ---------------- */
-
-async function handleImage(request, env) {
-  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
-  const body = await request.json().catch(() => null);
-  if (!body?.model || !body?.prompt) {
-    return json({ error: "Bad request: model and prompt are required" }, 400);
-  }
-
-  // Image-to-image: attach the user's uploaded images as data URLs
-  const content = body.images?.length
-    ? [
-        { type: "text", text: body.prompt },
-        ...body.images.map((url) => ({ type: "image_url", image_url: { url } })),
-      ]
-    : body.prompt;
-
-  const upstream = await fetch(`${apiBase(env)}/chat/completions`, {
-    method: "POST",
-    headers: openrouterHeaders(env, request),
-    body: JSON.stringify({
-      model: body.model,
-      messages: [{ role: "user", content }],
-      modalities: ["image", "text"],
-    }),
-  });
-
-  const data = await upstream.json().catch(() => null);
-  if (!upstream.ok) {
-    const msg = data?.error?.message || JSON.stringify(data)?.slice(0, 500);
-    return json({ error: `OpenRouter error (${upstream.status}): ${msg}` }, 502);
-  }
-
-  const message = data?.choices?.[0]?.message;
-  const images = (message?.images || []).map((img) => img?.image_url?.url).filter(Boolean);
-  return json({ images, text: message?.content || "" });
 }
 
 /* ---------------- Helpers ---------------- */

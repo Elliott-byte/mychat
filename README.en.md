@@ -235,7 +235,7 @@ mychat/
 │       ├── api.js            # backend client (including stream parsing)
 │       ├── markdown.jsx      # Markdown rendering (react-markdown + GFM + lowlight)
 │       ├── styles.css
-│       └── components/       # Login / Sidebar / ModelBar / ChatView / ImageView
+│       └── components/       # Login / Sidebar / ModelBar / ChatView
 ├── test/smoke.mjs            # jsdom smoke test: asserts the app mounts and renders
 ├── setup-github.sh           # Push to GitHub and generate your deploy link
 ├── sync-deploy.sh            # Sync updates into a clone made by the deploy button
