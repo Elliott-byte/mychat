@@ -24,6 +24,7 @@
     }
   },
   "devDependencies": {
-    "wrangler": "^4.28.0"
+    "// wrangler": "必须 ≥4.45.0:D1 自动创建(省去手填 database_id)从该版本起默认开启",
+    "wrangler": "^4.45.0"
   }
 }

@@ -63,13 +63,15 @@ npx wrangler login                            # 打开浏览器登录 Cloudflare
 npx wrangler secret put OPENROUTER_API_KEY    # 输入内容不会显示在屏幕上
 npx wrangler secret put MASTER_PASSWORD
 
-# 创建存历史的 D1 数据库,把输出的 database_id 填回 wrangler.jsonc
-npx wrangler d1 create mychat-history
-
-npm run deploy
+npm run deploy    # 会自动创建存历史的 D1 数据库
 ```
 
-> 表结构由 Worker 首次运行时自动建立,不需要手动跑 migration。
+> 存历史的 D1 数据库由 wrangler 部署时自动创建,表结构由 Worker 首次运行时自动建立,
+> 两步都不用你操心。
+>
+> ⚠️ **不要给 `wrangler.jsonc` 里的 `d1_databases` 补 `database_id`。** wrangler 只要
+> 看到这个字段非空,就认定绑定已配置完整、跳过自动创建,然后把这个 ID 发给 API 被拒,
+> 部署直接失败(错误码 10021)。留空着才是对的(需要 wrangler ≥ 4.45.0)。
 > 不想要历史功能的话,把 `wrangler.jsonc` 里的 `d1_databases` 整段删掉即可 —— 聊天照常可用,只是不保存记录。
 
 ---

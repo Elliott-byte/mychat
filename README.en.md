@@ -63,13 +63,15 @@ npx wrangler login                            # opens a browser to sign in to Cl
 npx wrangler secret put OPENROUTER_API_KEY    # input is hidden as you type
 npx wrangler secret put MASTER_PASSWORD
 
-# Create the D1 database for history, then paste the printed database_id into wrangler.jsonc
-npx wrangler d1 create mychat-history
-
-npm run deploy
+npm run deploy    # creates the D1 database for history automatically
 ```
 
-> The schema is created automatically the first time the Worker runs — no migration step needed.
+> The D1 database is provisioned automatically on deploy, and the schema is created the first time
+> the Worker runs. Neither needs your attention.
+>
+> ⚠️ **Do not add a `database_id` to the `d1_databases` block.** Wrangler treats any non-empty value
+> as "fully configured", skips auto-provisioning, and ships that ID to the API, which rejects it —
+> the deploy fails outright (error 10021). Leaving it out is correct (requires wrangler >= 4.45.0).
 > Don't want history? Delete the whole `d1_databases` block from `wrangler.jsonc`. Chat keeps working; it just won't save anything.
 
 ---
