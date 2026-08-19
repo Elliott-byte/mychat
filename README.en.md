@@ -126,7 +126,32 @@ Below 820px the sidebar collapses; tap ☰ at the top-left to open it. History l
 
 ---
 
-## 6. Security design
+## 6. Updating a deployed site
+
+When you click the deploy button, Cloudflare **clones the repo into a new repository** (adding a suffix if the
+name is taken, e.g. `mychat-deploy`) and wires CI/CD to *that* clone. So pushing to this repo does **not**
+update your live site on its own.
+
+Sync it:
+
+```bash
+./sync-deploy.sh                  # defaults to mychat-deploy
+./sync-deploy.sh your-repo-name   # if your clone is named differently
+```
+
+The script merges this repo's latest code into the deploy repo and pushes, which triggers an automatic rebuild.
+
+> **Why it isn't just a `git push`:** when Cloudflare cloned the repo it rewrote `name` in `wrangler.jsonc`
+> and `package.json` to the new repository's name. That `name` determines the Worker's identity and URL, and
+> your secrets are attached to that Worker — overwriting it blindly would deploy a brand-new Worker under a
+> different URL with no secrets set. The script preserves it for you.
+
+If you'd rather not maintain two repositories, go to **Cloudflare dashboard → your Worker → Settings → Build**
+and repoint the connected repository at this one. After that a plain `git push` deploys.
+
+---
+
+## 7. Security design
 
 | Area | Approach |
 |---|---|
@@ -146,7 +171,7 @@ All the browser ever sees is the frontend HTML/JS and a session cookie — **nev
 
 ---
 
-## 7. Free tier limits
+## 8. Free tier limits
 
 - **Cloudflare Workers free tier**: 100,000 requests/day, 10ms CPU time per request (proxying a stream uses almost no CPU)
 - **Static assets**: free, and they don't count toward the request quota
@@ -157,7 +182,7 @@ Personal use will essentially never reach Cloudflare's free ceiling.
 
 ---
 
-## 8. Project layout
+## 9. Project layout
 
 ```
 mychat/
@@ -166,13 +191,14 @@ mychat/
 ├── src/index.js          # Worker: auth + history (D1) + OpenRouter proxy
 ├── public/index.html     # Single-page frontend (login + sidebar + chat + images)
 ├── setup-github.sh       # Push to GitHub and generate your deploy link
+├── sync-deploy.sh        # Sync updates into the clone the deploy button made, triggering a redeploy
 ├── .dev.vars.example     # Source of the secret prompts on deploy; also the local dev template
 └── .gitignore
 ```
 
 ---
 
-## 9. Optional: environment variables
+## 10. Optional: environment variables
 
 | Variable | Type | Notes |
 |---|---|---|
@@ -182,7 +208,7 @@ mychat/
 
 ---
 
-## 10. Optional: use your own domain
+## 11. Optional: use your own domain
 
 If your domain is on Cloudflare, add this to `wrangler.jsonc`:
 

@@ -126,7 +126,30 @@ nvm alias default 22        # 或设为默认,一劳永逸
 
 ---
 
-## 六、安全设计
+## 六、更新已部署的站点
+
+点一键部署按钮时,Cloudflare 会**克隆一份新仓库**(本仓库名被占用时会自动加后缀,例如 `mychat-deploy`),
+CI/CD 接的是那个克隆仓库。所以往本仓库推代码,**线上不会自动更新**。
+
+同步一下即可:
+
+```bash
+./sync-deploy.sh                 # 默认目标 mychat-deploy
+./sync-deploy.sh 你的部署仓库名    # 名字不同时手动指定
+```
+
+脚本会把本仓库最新代码合并进部署仓库并推送,Cloudflare 随即自动重新构建部署。
+
+> **它为什么不是简单的 `git push`:** Cloudflare 克隆时把 `wrangler.jsonc` 和 `package.json`
+> 里的 `name` 改成了新仓库名。这个 `name` 决定 Worker 的名字和访问网址,而你填的密钥是绑在那个
+> Worker 上的 —— 直接覆盖会部署出一个全新的 Worker,网址变了、密钥还得重填。脚本会自动保留它。
+
+如果你不想维护两个仓库,也可以在 **Cloudflare 控制台 → 你的 Worker → Settings → Build**
+里把连接的仓库改成本仓库,之后直接 `git push` 就会自动部署。
+
+---
+
+## 七、安全设计
 
 | 项目 | 做法 |
 |---|---|
@@ -146,7 +169,7 @@ nvm alias default 22        # 或设为默认,一劳永逸
 
 ---
 
-## 七、免费额度
+## 八、免费额度
 
 - **Cloudflare Workers 免费版**:每天 100,000 次请求,单次 CPU 时间 10ms(流式转发几乎不占 CPU)
 - **静态资源**:免费且不计入请求数
@@ -157,7 +180,7 @@ nvm alias default 22        # 或设为默认,一劳永逸
 
 ---
 
-## 八、文件结构
+## 九、文件结构
 
 ```
 mychat/
@@ -166,13 +189,14 @@ mychat/
 ├── src/index.js          # Worker:认证 + 历史记录(D1)+ OpenRouter 代理
 ├── public/index.html     # 前端单页(登录 + 侧边栏 + 对话 + 图片)
 ├── setup-github.sh       # 一键推送到 GitHub 并生成部署链接
+├── sync-deploy.sh        # 把更新同步到一键部署克隆出的仓库,触发自动重新部署
 ├── .dev.vars.example     # 一键部署据此提示填写密钥;也是本地开发模板
 └── .gitignore
 ```
 
 ---
 
-## 九、可选:环境变量
+## 十、可选:环境变量
 
 | 变量 | 类型 | 说明 |
 |---|---|---|
@@ -182,7 +206,7 @@ mychat/
 
 ---
 
-## 十、可选:绑定自己的域名
+## 十一、可选:绑定自己的域名
 
 域名托管在 Cloudflare 的话,在 `wrangler.jsonc` 里加:
 
