@@ -1,3 +1,9 @@
+<div align="right">
+
+**简体中文** · [English](README.en.md)
+
+</div>
+
 # MyChat — 私人 AI 试用台
 
 跑在 Cloudflare Workers 免费版上的个人 AI 试用站,通过 OpenRouter 调用各家最新的对话模型和图片模型。
@@ -74,8 +80,12 @@ npm run dev
 
 ## 四、Node 版本说明
 
-Wrangler 需要 **Node.js 22+**。你机器上默认是 v18,但已装了 v22.18.0,用之前先 `nvm use 22`。
-嫌麻烦可以设为默认:`nvm alias default 22`。
+Wrangler 需要 **Node.js 22+**。如果你的默认版本较低,先切换:
+
+```bash
+nvm use 22                  # 临时切换
+nvm alias default 22        # 或设为默认,一劳永逸
+```
 
 (用一键部署按钮的话,构建在 Cloudflare 云端进行,本地 Node 版本无所谓。)
 

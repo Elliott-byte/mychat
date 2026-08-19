@@ -21,8 +21,14 @@ if git ls-files --error-unmatch .dev.vars >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "▶ 把占位符替换成 $USER_NAME/$REPO …"
-sed -i '' "s|YOUR_GITHUB_USERNAME/mychat|$USER_NAME/$REPO|g" README.md package.json
+echo "▶ 把仓库链接指向 $USER_NAME/$REPO …"
+# 同时处理未替换的占位符和上游作者的用户名,这样 fork 之后跑本脚本也能得到正确的部署链接
+for f in README.md README.en.md package.json; do
+  [ -f "$f" ] || continue
+  sed -i '' \
+    -e "s|YOUR_GITHUB_USERNAME/mychat|$USER_NAME/$REPO|g" \
+    -e "s|Elliott-byte/mychat|$USER_NAME/$REPO|g" "$f"
+done
 
 echo "▶ 初始化 git 仓库 …"
 [ -d .git ] || git init -q
