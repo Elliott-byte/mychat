@@ -24,7 +24,7 @@ fi
 echo "▶ Pointing repository links at $USER_NAME/$REPO …"
 # Rewrite both the placeholder and the upstream author's name, so running this
 # after forking also produces a correct deploy link.
-for f in README.md README.en.md package.json; do
+for f in README.md README.zh-CN.md package.json; do
   [ -f "$f" ] || continue
   sed -i '' \
     -e "s|YOUR_GITHUB_USERNAME/mychat|$USER_NAME/$REPO|g" \

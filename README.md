@@ -1,262 +1,270 @@
 <div align="right">
 
-**简体中文** · [English](README.en.md)
+[简体中文](README.zh-CN.md) · **English**
 
 </div>
 
-# MyChat — 私人 AI 试用台
+# MyChat — Your Private AI Playground
 
-跑在 Cloudflare Workers 免费版上的个人 AI 试用站,通过 OpenRouter 调用各家最新的对话模型和图片模型。
+A personal AI playground running on Cloudflare Workers' free tier, calling the latest chat and image models through OpenRouter.
 
-> 界面与源码均为英文;本文档提供中英双语。
+> The interface and source are in English; this documentation is available in both English and Chinese.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Elliott-byte/mychat)
 
-> 👆 **点这个按钮即可一键部署。** 部署过程中 Cloudflare 会提示你填写
-> `OPENROUTER_API_KEY` 和 `MASTER_PASSWORD`,填完自动构建上线,不需要任何命令行操作。
+> 👆 **Click the button to deploy in one step.** Cloudflare will prompt you for
+> `OPENROUTER_API_KEY` and `MASTER_PASSWORD` during setup, then build and go live automatically — no command line needed.
 
 ---
 
-## 特点
+## Features
 
-- **全部免费资源** — Cloudflare Workers 免费版(每天 10 万次请求)+ 静态资源托管,无需付费计划
-- **主密码保护** — 只有你能用,未登录时所有 API 一律 401
-- **密钥安全** — OpenRouter API Key 存在 Cloudflare Secret 里,只在服务端使用,永远不会出现在网页源码或浏览器里
-- **模型自动更新** — 模型列表实时从 OpenRouter 拉取,按上线时间倒序,新模型自动出现在最前面,无需改代码
-- **ChatGPT 式界面** — 左侧历史记录侧边栏,流式输出、停止生成、重新生成、一键复制
-- **历史云端保存** — 对话存在 Cloudflare D1(同样免费),换设备打开还是同一份记录
-- **图片直接贴进对话** — 粘贴、拖拽或点 📎 附加图片,不用切换到别的页面;会读图的模型标 👁,会出图的标 🎨
-- **React 前端** — React 19 + Vite 组件化开发
-- **完整 Markdown** — 标题/列表/表格/引用/任务列表,代码块带语法高亮与复制按钮
+- **Entirely free infrastructure** — Cloudflare Workers free tier (100,000 requests/day) plus static asset hosting. No paid plan required.
+- **Master password protection** — Only you can use it. Every API route returns 401 without a valid session.
+- **Keys stay secret** — Your OpenRouter API key lives in a Cloudflare Secret, is used only server-side, and never appears in page source or the browser.
+- **Models update themselves** — The model list is fetched live from OpenRouter and sorted newest-first, so new releases show up at the top without any code changes.
+- **ChatGPT-style interface** — Conversation history in a left sidebar, streaming output, stop generation, regenerate, one-click copy.
+- **History stored in the cloud** — Conversations live in Cloudflare D1 (also free), so switching devices shows you the same history.
+- **Images live in the chat** — paste, drop, or attach an image without switching screens. Models that read images are marked 👁, models that return them 🎨.
+- **React frontend** — React 19 + Vite, component-based.
+- **Full Markdown** — headings, lists, tables, blockquotes, task lists; code blocks get syntax highlighting and a copy button.
 
 ---
 
-## 一、一键部署(推荐)
+## 1. One-click deploy (recommended)
 
-直接点本文顶部的 **Deploy to Cloudflare** 按钮,或访问:
+Click the **Deploy to Cloudflare** button above, or visit:
 
 <https://deploy.workers.cloudflare.com/?url=https://github.com/Elliott-byte/mychat>
 
-Cloudflare 会:
+Cloudflare will:
 
-1. 让你登录 Cloudflare 账号(没有就免费注册)
-2. 把仓库 fork 到你的 GitHub
-3. **提示你填写两个密钥**(这一步很关键):
-   - `OPENROUTER_API_KEY` — 到 https://openrouter.ai/keys 创建,格式 `sk-or-v1-...`
-   - `MASTER_PASSWORD` — 你自己设的登录密码,建议用 `openssl rand -base64 24` 生成
-4. **自动创建 D1 数据库**(存聊天历史用)并回填配置,你不用管
-5. 自动构建并部署,同时配好 CI/CD(以后 `git push` 就会自动重新部署)
+1. Ask you to sign in to Cloudflare (free to register if you don't have an account)
+2. Fork this repository into your GitHub account
+3. **Prompt you for two secrets** — this is the important step:
+   - `OPENROUTER_API_KEY` — create one at https://openrouter.ai/keys, format `sk-or-v1-...`
+   - `MASTER_PASSWORD` — the password you'll log in with. Generate a strong one with `openssl rand -base64 24`
+4. **Create a D1 database automatically** (for chat history) and fill in its ID — nothing for you to do
+5. Build, deploy, and wire up CI/CD, so future `git push`es redeploy automatically
 
-完成后会给你一个网址,形如 `https://mychat.<账号名>.workers.dev`,打开输入主密码即可使用。
+When it finishes you'll get a URL like `https://mychat.<your-account>.workers.dev`. Open it, enter your master password, and you're in.
 
-> 如果部署时漏填了密钥,登录页会直接红字提示缺哪个,按提示到
-> **Cloudflare 控制台 → Workers & Pages → mychat → Settings → Variables and Secrets**
-> 补上(类型选 **Secret**)再重新部署即可。
+> If you skip a secret during setup, the login page tells you exactly which one is missing. Add it under
+> **Cloudflare dashboard → Workers & Pages → mychat → Settings → Variables and Secrets**
+> (choose type **Secret**), then redeploy.
 
 ---
 
-## 二、命令行部署(不想用 GitHub 的话)
+## 2. Command-line deploy (if you'd rather skip GitHub)
 
 ```bash
 git clone https://github.com/Elliott-byte/mychat.git && cd mychat
-nvm use 22                                    # wrangler 需要 Node 22+
+nvm use 22                                    # wrangler needs Node 22+
 
 npm install
-npx wrangler login                            # 打开浏览器登录 Cloudflare
+npx wrangler login                            # opens a browser to sign in to Cloudflare
 
-npx wrangler secret put OPENROUTER_API_KEY    # 输入内容不会显示在屏幕上
+npx wrangler secret put OPENROUTER_API_KEY    # input is hidden as you type
 npx wrangler secret put MASTER_PASSWORD
 
-npm run deploy    # 会自动创建存历史的 D1 数据库
+npm run deploy    # creates the D1 database for history automatically
 ```
 
-> 存历史的 D1 数据库由 wrangler 部署时自动创建,表结构由 Worker 首次运行时自动建立,
-> 两步都不用你操心。
+> The D1 database is provisioned automatically on deploy, and the schema is created the first time
+> the Worker runs. Neither needs your attention.
 >
-> ⚠️ **不要给 `wrangler.jsonc` 里的 `d1_databases` 补 `database_id`。** wrangler 只要
-> 看到这个字段非空,就认定绑定已配置完整、跳过自动创建,然后把这个 ID 发给 API 被拒,
-> 部署直接失败(错误码 10021)。留空着才是对的(需要 wrangler ≥ 4.45.0)。
-> 不想要历史功能的话,把 `wrangler.jsonc` 里的 `d1_databases` 整段删掉即可 —— 聊天照常可用,只是不保存记录。
+> ⚠️ **Do not add a `database_id` to the `d1_databases` block.** Wrangler treats any non-empty value
+> as "fully configured", skips auto-provisioning, and ships that ID to the API, which rejects it —
+> the deploy fails outright (error 10021). Leaving it out is correct (requires wrangler >= 4.45.0).
+> Don't want history? Delete the whole `d1_databases` block from `wrangler.jsonc`. Chat keeps working; it just won't save anything.
 
 ---
 
-## 三、本地开发
+## 3. Local development
 
 ```bash
 cp .dev.vars.example .dev.vars
-# 编辑 .dev.vars 填入真实的 Key 和密码
+# edit .dev.vars and fill in your real key and password
 nvm use 22
 npm install
-npm run dev          # 自动构建前端 + 启动 Worker,访问 http://localhost:8787
+npm run dev          # builds the frontend, starts the Worker at http://localhost:8787
 ```
 
-改前端想要热更新的话,再开一个终端:
+For hot reload while working on the UI, open a second terminal:
 
 ```bash
-npm run dev:ui       # Vite 开发服务器,/api 自动转发给上面的 wrangler
+npm run dev:ui       # Vite dev server; /api is proxied to the wrangler process above
 ```
 
-跑测试(构建 + 在 jsdom 里验证 React 应用能正常挂载渲染):
+Run the tests (builds, then verifies in jsdom that the React app mounts and renders):
 
 ```bash
 npm test
 ```
 
-`.dev.vars` 和 `dist/` 都在 `.gitignore` 中,不会被提交。
+Both `.dev.vars` and `dist/` are in `.gitignore`, so neither is ever committed.
 
 ---
 
-## 四、Node 版本说明
+## 4. Node version
 
-Wrangler 需要 **Node.js 22+**。如果你的默认版本较低,先切换:
+Wrangler requires **Node.js 22+**. If your default is older, switch first:
 
 ```bash
-nvm use 22                  # 临时切换
-nvm alias default 22        # 或设为默认,一劳永逸
+nvm use 22                  # switch for this shell
+nvm alias default 22        # or make it the default once and for all
 ```
 
-(用一键部署按钮的话,构建在 Cloudflare 云端进行,本地 Node 版本无所谓。)
+(With the one-click deploy button the build happens in Cloudflare's cloud, so your local Node version doesn't matter.)
 
 ---
 
-## 五、功能说明
+## 5. How it works
 
-### 💬 对话
-- 左侧边栏是历史记录列表,点任意一条即可回到当时的上下文继续聊
-- 标题自动取自你的第一句话;鼠标悬停可**重命名(✎)或删除(🗑)**
-- 流式输出(打字机效果),生成中按钮变成红色的 **■**(停止生成),随时可中断
-- 每条消息悬停可 **📋 Copy**(复制);助手消息还可 **↻ Regenerate**(重新生成)(丢弃该条及之后的内容,重新回答)
-- **完整 Markdown 渲染**:标题、有序/无序列表、任务列表、表格、引用、分隔线、链接、粗体/斜体/删除线
-- 代码块有**语法高亮**(内置 18 种常用语言,未覆盖的语言自动检测)、语言标注和独立的**复制**按钮
-- 链接一律新标签打开;模型输出全部渲染为 React 节点而非 HTML,粘贴或模型返回的恶意内容无法注入
-- 模型下拉框按**上线日期倒序**,最新的排最前;可搜索、可勾选 “Free only”
-- 信息栏显示:模型 ID、上线日期、上下文长度、每百万 token 价格
-- 切换模型**不会**清空当前对话,方便同一个问题对比不同模型
-- 输入框随内容自动增高;滚动到历史位置时不会被新内容强行拽到底部
+### 💬 Chat
+- The left sidebar lists your conversation history — click any entry to resume it with full context
+- Titles come from your first message; hover to **rename (✎) or delete (🗑)**
+- Streaming output (typewriter effect). While generating, the button becomes **■ stop**, so you can interrupt at any time
+- Hover any message to **copy** it; assistant messages also offer **↻ regenerate** (drops that reply and everything after it, then answers again)
+- **Full Markdown rendering**: headings, ordered/unordered lists, task lists, tables, blockquotes, rules, links, bold/italic/strikethrough
+- Code blocks get **syntax highlighting** (18 common languages built in, auto-detection for the rest), a language label, and a **copy** button
+- Links always open in a new tab; model output renders as React nodes rather than HTML, so pasted or model-returned markup cannot inject anything
+- The model dropdown is **sorted by release date**, newest first; searchable, with a "free only" filter
+- The info bar shows model ID, release date, context length, and price per million tokens
+- Switching models does **not** clear the current conversation, so you can put the same question to different models back to back
+- The input box grows with your text, and scrolling up to read won't yank you back to the bottom
 
-### 🎨 图片
-- 自动筛选出**支持图片输出**的模型(如 Nano Banana / GPT-5 Image 等)
-- 输入提示词生成图片,可下载
-- 支持**图生图**:点 “📎 Reference image”上传一张或多张图片作为参考
+### 🖼 Images
+Images work inside the conversation — there is no separate screen:
 
-### ⟳ 刷新模型
-模型列表在服务端缓存 1 小时,自动更新。想立刻拉最新的就点左下角的“⟳ Refresh models”。
+- **Paste** (Cmd+V), **drop** onto the window, or click **📎** beside the composer
+- Thumbnails appear before you send, each removable, labelled with its compressed size
+- Images are resized in the browser to 1280px on the long edge and re-encoded as JPEG,
+  usually taking a multi-megabyte photo down to 100-300 KB — cheaper in tokens, faster to
+  upload, and small enough for D1 (2 MB per row)
+- In the model dropdown, **👁** means the model can read images and **🎨** means it can
+  return them. Pick an image-capable model and its output appears inline; click to open full size
+- Attachments are saved with the conversation. If one is too large to store, only the stored
+  copy degrades to a placeholder — what gets sent to the model is always complete
 
-### 📱 手机上
-宽度小于 820px 时侧边栏自动收起,点左上角 ☰ 唤出。历史存在云端,手机和电脑看到的是同一份。
+### ⟳ Refresh models
+The model list is cached server-side for one hour and refreshes on its own. Click "⟳ refresh models" at the bottom-left to pull the latest immediately.
+
+### 📱 On mobile
+Below 820px the sidebar collapses; tap ☰ at the top-left to open it. History lives in the cloud, so your phone and laptop see the same conversations.
 
 ---
 
-## 六、更新已部署的站点
+## 6. Updating a deployed site
 
-### 推荐:让 Worker 直接连本仓库(一次配置,以后 push 即部署)
+### Recommended: connect the Worker straight to this repo (set up once, then push to deploy)
 
-**Cloudflare 控制台 → Workers & Pages → 你的 Worker → Settings → Builds → Git Repository → Manage**,
-选择本仓库。之后每次 `git push` 都会自动重新构建部署,不产生任何克隆仓库。
+Go to **Cloudflare dashboard → Workers & Pages → your Worker → Settings → Builds → Git Repository → Manage**
+and select this repository. From then on every `git push` triggers a rebuild and deploy, with no clone involved.
 
-新建 Worker 时也可以走这条路:**Workers & Pages → Create → Workers → Import a repository**。
+You can also start this way for a new Worker: **Workers & Pages → Create → Workers → Import a repository**.
 
-> 注意 `wrangler.jsonc` 里的 `name` 必须和目标 Worker 同名 —— 它决定部署到哪个 Worker,
-> 也决定访问网址。名字对不上会创建出一个全新的 Worker,密钥需要重填。
+> The `name` in `wrangler.jsonc` must match the target Worker — it decides which Worker you deploy to and
+> what the URL is. A mismatch creates a brand-new Worker, and you'd have to set the secrets again.
 
-### 说明:一键部署按钮会克隆仓库
+### Note: the one-click button clones the repo
 
-点 **Deploy to Cloudflare** 按钮部署时,Cloudflare 不是直接连接本仓库,而是**克隆一份新仓库**
-(本仓库名被占用时自动加后缀,如 `mychat-deploy`),CI/CD 接在克隆仓库上。
-这种情况下往本仓库推代码,线上不会更新。
+When you deploy via the **Deploy to Cloudflare** button, Cloudflare doesn't connect to this repo directly —
+it **clones it into a new repository** (adding a suffix if the name is taken, e.g. `mychat-deploy`) and wires
+CI/CD to the clone. In that setup, pushing here does not update your live site.
 
-如果你已经是这个状态,用同步脚本把更新推过去:
+If that's your situation, sync the updates across:
 
 ```bash
-./sync-deploy.sh                 # 默认目标 mychat-deploy
-./sync-deploy.sh 你的部署仓库名    # 名字不同时手动指定
+./sync-deploy.sh                  # defaults to mychat-deploy
+./sync-deploy.sh your-repo-name   # if your clone is named differently
 ```
 
-脚本以合并方式同步(不重写历史),并自动保留克隆仓库里被改写过的 Worker 名 ——
-直接覆盖会部署出一个全新 Worker,网址变了、密钥还得重填。
+The script merges (it never rewrites history) and preserves the Worker name the clone was given — overwriting
+it blindly would deploy a brand-new Worker under a different URL with no secrets set.
 
-长期建议还是改用上面的直连方式,单一仓库更清爽。
+Long term, the direct connection above is cleaner: one repository instead of two.
 
 ---
 
-## 七、安全设计
+## 7. Security design
 
-| 项目 | 做法 |
+| Area | Approach |
 |---|---|
-| API Key 存储 | Cloudflare Secret(加密存储),仅服务端 `env.OPENROUTER_API_KEY` 读取 |
-| 主密码存储 | Cloudflare Secret,不落代码库 |
-| 会话凭证 | HMAC-SHA256 签名 Cookie,`HttpOnly` + `Secure` + `SameSite=Strict`,7 天有效 |
-| 密码比对 | 比较 SHA-256 摘要(恒定 32 字节),既防时序攻击,也杜绝超大密码字段打爆 CPU |
-| 暴力破解 | 失败次数记在 D1 里,10 分钟内错 8 次即锁定。计数跨请求共享,并发攻击同样受限 |
-| 防 CSRF | 所有状态变更请求校验 Origin(`SameSite=Strict` 在 workers.dev 同账号下不够用) |
-| 内容安全策略 | `img-src 'self' data:` —— 模型若被提示注入诱导返回外链图片,浏览器不会去请求,杜绝对话内容外泄 |
-| 接口保护 | `/api/models`、`/api/chat`、`/api/image` 全部校验会话,未登录返回 401 |
-| 聊天历史 | 存于你自己的 Cloudflare D1,只有登录后才能读写,不经过任何第三方 |
-| 搜索引擎 | 页面带 `noindex, nofollow` |
+| API key storage | Cloudflare Secret (encrypted at rest), read only server-side via `env.OPENROUTER_API_KEY` |
+| Master password storage | Cloudflare Secret, never committed to the repo |
+| Session credential | HMAC-SHA256 signed cookie, `HttpOnly` + `Secure` + `SameSite=Strict`, valid 7 days |
+| Password comparison | Compares SHA-256 digests (always 32 bytes), which defeats timing attacks and stops an oversized password field from burning the CPU budget |
+| Brute force | Failures are counted in D1 and lock out after 8 attempts in 10 minutes. The counter is shared across requests, so parallel guessing is limited too |
+| CSRF | Every state-changing request checks Origin (`SameSite=Strict` is not enough when sibling Workers share your workers.dev subdomain) |
+| Content Security Policy | `img-src 'self' data:` — if a prompt injection makes the model emit a remote image URL, the browser never fetches it, closing the usual conversation-exfiltration channel |
+| Route protection | `/api/models`, `/api/chat`, and `/api/image` all verify the session and return 401 when absent |
+| Chat history | Stored in your own Cloudflare D1, readable and writable only after login, never touching a third party |
+| Search engines | Pages carry `noindex, nofollow` |
 
-浏览器里能看到的只有前端 HTML/JS 和登录后的会话 Cookie,**拿不到 API Key**。所有 OpenRouter 请求都由 Worker 代发。
+All the browser ever sees is the frontend HTML/JS and a session cookie — **never the API key**. Every OpenRouter request is proxied by the Worker.
 
-**换密码**:重新设置 `MASTER_PASSWORD` 并重新部署。因为会话签名密钥从主密码派生,换密码会自动让所有已登录会话失效。
+**Changing your password**: set `MASTER_PASSWORD` again and redeploy. Because the session signing key is derived from the master password, changing it automatically invalidates all existing sessions.
 
-**⚠️ 仓库公开的前提是不含密钥** —— 本项目已用 `.gitignore` 排除 `.dev.vars`,请不要把真实 Key 写进任何被提交的文件。
-
----
-
-## 八、免费额度
-
-- **Cloudflare Workers 免费版**:每天 100,000 次请求,单次 CPU 时间 10ms(流式转发几乎不占 CPU)
-- **静态资源**:免费且不计入请求数
-- **Cloudflare D1**(聊天历史):免费版 **500 MB** 存储、每天 500 万行读取 / 10 万行写入(单行上限 2 MB)
-- **OpenRouter**:`:free` 结尾的模型免费(有速率限制),其他按量计费
-
-个人自用基本触不到 Cloudflare 的免费上限。
+**⚠️ A public repo is only safe because it holds no secrets** — `.dev.vars` is excluded via `.gitignore`. Never write a real key into any file that gets committed.
 
 ---
 
-## 九、文件结构
+## 8. Free tier limits
+
+- **Cloudflare Workers free tier**: 100,000 requests/day, 10ms CPU time per request (proxying a stream uses almost no CPU)
+- **Static assets**: free, and they don't count toward the request quota
+- **Cloudflare D1** (chat history): free tier gives **500 MB** of storage and 5M row reads / 100K row writes per day (2 MB max per row)
+- **OpenRouter**: models ending in `:free` cost nothing (rate-limited); everything else is pay-as-you-go
+
+Personal use will essentially never reach Cloudflare's free ceiling.
+
+---
+
+## 9. Project layout
 
 ```
 mychat/
-├── wrangler.jsonc            # Cloudflare 配置(含 D1 绑定与前端构建命令)
-├── vite.config.mjs           # Vite 配置:web/ → dist/
-├── .node-version             # 固定 Cloudflare 构建环境的 Node 版本(wrangler 需要 22+)
-├── package.json              # 含 cloudflare.bindings,用于一键部署时的密钥说明
-├── src/index.js              # Worker:认证 + 历史记录(D1)+ OpenRouter 代理
-├── web/                      # React 前端源码
+├── wrangler.jsonc            # Cloudflare config (D1 binding + frontend build command)
+├── vite.config.mjs           # Vite config: web/ → dist/
+├── .node-version             # pins the Node version for Cloudflare builds (wrangler needs 22+)
+├── package.json              # includes cloudflare.bindings — the secret prompts on one-click deploy
+├── src/index.js              # Worker: auth + history (D1) + OpenRouter proxy
+├── web/                      # React frontend source
 │   ├── index.html
 │   └── src/
-│       ├── main.jsx          # 入口
-│       ├── App.jsx           # 全局状态与编排
-│       ├── api.js            # 后端接口封装(含流式解析)
-│       ├── markdown.jsx      # Markdown 渲染(react-markdown + GFM + lowlight 高亮)
+│       ├── main.jsx          # entry point
+│       ├── App.jsx           # global state and orchestration
+│       ├── api.js            # backend client (including stream parsing)
+│       ├── markdown.jsx      # Markdown rendering (react-markdown + GFM + lowlight)
 │       ├── styles.css
 │       └── components/       # Login / Sidebar / ModelBar / ChatView
-├── test/smoke.mjs            # jsdom 冒烟测试:验证应用能挂载并正确渲染
-├── setup-github.sh           # 一键推送到 GitHub 并生成部署链接
-├── sync-deploy.sh            # 把更新同步到一键部署克隆出的仓库
-├── .dev.vars.example         # 一键部署据此提示填写密钥;也是本地开发模板
-└── .gitignore                # 已排除 dist/ 与 .dev.vars
+├── test/smoke.mjs            # jsdom smoke test: asserts the app mounts and renders
+├── setup-github.sh           # Push to GitHub and generate your deploy link
+├── sync-deploy.sh            # Sync updates into a clone made by the deploy button
+├── .dev.vars.example         # Source of the secret prompts on deploy; also the local dev template
+└── .gitignore                # excludes dist/ and .dev.vars
 ```
 
-> 前端构建由 `wrangler.jsonc` 的 `build.command` 触发,`wrangler deploy` 会自动先跑
-> `npm run build`,所以 Cloudflare 云端构建**不需要额外配置**。
+> The frontend build is wired through `build.command` in `wrangler.jsonc`, so `wrangler deploy`
+> runs `npm run build` first. Cloudflare's cloud builds need **no extra configuration**.
 
 ---
 
-## 十、可选:环境变量
+## 10. Optional: environment variables
 
-| 变量 | 类型 | 说明 |
+| Variable | Type | Notes |
 |---|---|---|
-| `OPENROUTER_API_KEY` | Secret | **必填**,OpenRouter 密钥 |
-| `MASTER_PASSWORD` | Secret | **必填**,登录主密码 |
-| `SESSION_SECRET` | Secret | 可选但**建议配置**。用 `openssl rand -base64 32` 生成,用于签名会话 Cookie。不配的话签名密钥由主密码派生 —— 一旦 Cookie 泄露,攻击者可离线爆破出你的主密码 |
-| `OPENROUTER_BASE_URL` | 普通变量 | 可选。默认 `https://openrouter.ai/api/v1`,网络不通时可指向镜像或自建代理 |
+| `OPENROUTER_API_KEY` | Secret | **Required.** Your OpenRouter key |
+| `MASTER_PASSWORD` | Secret | **Required.** The password you log in with |
+| `SESSION_SECRET` | Secret | Optional but **recommended**. Generate with `openssl rand -base64 32`; used to sign session cookies. Without it the signing key is derived from your master password, so a leaked cookie could be used to crack that password offline |
+| `OPENROUTER_BASE_URL` | Plain var | Optional. Defaults to `https://openrouter.ai/api/v1`; point it at a mirror or your own proxy if the default is unreachable |
 
 ---
 
-## 十一、可选:绑定自己的域名
+## 11. Optional: use your own domain
 
-域名托管在 Cloudflare 的话,在 `wrangler.jsonc` 里加:
+If your domain is on Cloudflare, add this to `wrangler.jsonc`:
 
 ```jsonc
 "routes": [
@@ -264,4 +272,4 @@ mychat/
 ]
 ```
 
-然后重新部署。
+Then redeploy.
