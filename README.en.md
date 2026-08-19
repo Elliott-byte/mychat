@@ -24,7 +24,8 @@ A personal AI playground running on Cloudflare Workers' free tier, calling the l
 - **ChatGPT-style interface** — Conversation history in a left sidebar, streaming output, stop generation, regenerate, one-click copy.
 - **History stored in the cloud** — Conversations live in Cloudflare D1 (also free), so switching devices shows you the same history.
 - **Chat + images in one place** — Streaming conversations, text-to-image, and image-to-image.
-- **React frontend** — React 19 + Vite, component-based, and the build is only 66KB gzipped.
+- **React frontend** — React 19 + Vite, component-based.
+- **Full Markdown** — headings, lists, tables, blockquotes, task lists; code blocks get syntax highlighting and a copy button.
 
 ---
 
@@ -123,7 +124,9 @@ nvm alias default 22        # or make it the default once and for all
 - Titles come from your first message; hover to **rename (✎) or delete (🗑)**
 - Streaming output (typewriter effect). While generating, the button becomes **■ stop**, so you can interrupt at any time
 - Hover any message to **copy** it; assistant messages also offer **↻ regenerate** (drops that reply and everything after it, then answers again)
-- Code blocks get their own **copy** button in the top-right corner
+- **Full Markdown rendering**: headings, ordered/unordered lists, task lists, tables, blockquotes, rules, links, bold/italic/strikethrough
+- Code blocks get **syntax highlighting** (18 common languages built in, auto-detection for the rest), a language label, and a **copy** button
+- Links always open in a new tab; model output renders as React nodes rather than HTML, so pasted or model-returned markup cannot inject anything
 - The model dropdown is **sorted by release date**, newest first; searchable, with a "free only" filter
 - The info bar shows model ID, release date, context length, and price per million tokens
 - Switching models does **not** clear the current conversation, so you can put the same question to different models back to back
@@ -211,6 +214,7 @@ Personal use will essentially never reach Cloudflare's free ceiling.
 mychat/
 ├── wrangler.jsonc            # Cloudflare config (D1 binding + frontend build command)
 ├── vite.config.mjs           # Vite config: web/ → dist/
+├── .node-version             # pins the Node version for Cloudflare builds (wrangler needs 22+)
 ├── package.json              # includes cloudflare.bindings — the secret prompts on one-click deploy
 ├── src/index.js              # Worker: auth + history (D1) + OpenRouter proxy
 ├── web/                      # React frontend source
@@ -219,7 +223,7 @@ mychat/
 │       ├── main.jsx          # entry point
 │       ├── App.jsx           # global state and orchestration
 │       ├── api.js            # backend client (including stream parsing)
-│       ├── markdown.jsx      # minimal Markdown renderer (no third-party deps)
+│       ├── markdown.jsx      # Markdown rendering (react-markdown + GFM + lowlight)
 │       ├── styles.css
 │       └── components/       # Login / Sidebar / ModelBar / ChatView / ImageView
 ├── test/smoke.mjs            # jsdom smoke test: asserts the app mounts and renders

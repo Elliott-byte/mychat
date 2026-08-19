@@ -155,6 +155,13 @@ export default function App() {
       setStreamingText("");
 
       let full = "";
+      // 每个 token 都重新解析一遍 Markdown 会卡,这里节流到约 60ms 一次。
+      // 视觉上仍是流式打字,但解析次数降到十分之一。
+      let flushTimer = null;
+      const flush = () => {
+        flushTimer = null;
+        setStreamingText(full);
+      };
       try {
         const { convId, isNew } = await api.chatStream({
           model,
@@ -163,9 +170,10 @@ export default function App() {
           signal: controller.signal,
           onDelta: (d) => {
             full += d;
-            setStreamingText(full);
+            if (!flushTimer) flushTimer = setTimeout(flush, 60);
           },
         });
+        clearTimeout(flushTimer);
         if (convId) setCurrentId(convId);
         setMessages([...payload, { role: "assistant", content: full || "(模型返回了空响应)", model }]);
         if (isNew) loadConversations();
@@ -178,6 +186,7 @@ export default function App() {
             return copy;
           });
       } catch (err) {
+        clearTimeout(flushTimer);
         if (err.name === "AbortError") {
           // 已生成的部分保留下来,不白费
           if (full) setMessages([...payload, { role: "assistant", content: full, model }]);

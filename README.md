@@ -24,7 +24,8 @@
 - **ChatGPT 式界面** — 左侧历史记录侧边栏,流式输出、停止生成、重新生成、一键复制
 - **历史云端保存** — 对话存在 Cloudflare D1(同样免费),换设备打开还是同一份记录
 - **对话 + 图片** — 流式对话、文生图、图生图,一个站全包
-- **React 前端** — React 19 + Vite 组件化开发,构建产物仅 66KB(gzip)
+- **React 前端** — React 19 + Vite 组件化开发
+- **完整 Markdown** — 标题/列表/表格/引用/任务列表,代码块带语法高亮与复制按钮
 
 ---
 
@@ -123,7 +124,9 @@ nvm alias default 22        # 或设为默认,一劳永逸
 - 标题自动取自你的第一句话;鼠标悬停可**重命名(✎)或删除(🗑)**
 - 流式输出(打字机效果),生成中按钮变成 **■ 停止生成**,随时可中断
 - 每条消息悬停可**复制**;助手消息还可**↻ 重新生成**(丢弃该条及之后的内容,重新回答)
-- 代码块自动高亮边框,右上角有独立的**复制代码**按钮
+- **完整 Markdown 渲染**:标题、有序/无序列表、任务列表、表格、引用、分隔线、链接、粗体/斜体/删除线
+- 代码块有**语法高亮**(内置 18 种常用语言,未覆盖的语言自动检测)、语言标注和独立的**复制**按钮
+- 链接一律新标签打开;模型输出全部渲染为 React 节点而非 HTML,粘贴或模型返回的恶意内容无法注入
 - 模型下拉框按**上线日期倒序**,最新的排最前;可搜索、可勾选「只看免费」
 - 信息栏显示:模型 ID、上线日期、上下文长度、每百万 token 价格
 - 切换模型**不会**清空当前对话,方便同一个问题对比不同模型
@@ -211,6 +214,7 @@ nvm alias default 22        # 或设为默认,一劳永逸
 mychat/
 ├── wrangler.jsonc            # Cloudflare 配置(含 D1 绑定与前端构建命令)
 ├── vite.config.mjs           # Vite 配置:web/ → dist/
+├── .node-version             # 固定 Cloudflare 构建环境的 Node 版本(wrangler 需要 22+)
 ├── package.json              # 含 cloudflare.bindings,用于一键部署时的密钥说明
 ├── src/index.js              # Worker:认证 + 历史记录(D1)+ OpenRouter 代理
 ├── web/                      # React 前端源码
@@ -219,7 +223,7 @@ mychat/
 │       ├── main.jsx          # 入口
 │       ├── App.jsx           # 全局状态与编排
 │       ├── api.js            # 后端接口封装(含流式解析)
-│       ├── markdown.jsx      # 极简 Markdown 渲染(无第三方依赖)
+│       ├── markdown.jsx      # Markdown 渲染(react-markdown + GFM + lowlight 高亮)
 │       ├── styles.css
 │       └── components/       # Login / Sidebar / ModelBar / ChatView / ImageView
 ├── test/smoke.mjs            # jsdom 冒烟测试:验证应用能挂载并正确渲染
