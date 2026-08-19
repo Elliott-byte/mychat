@@ -130,24 +130,33 @@ nvm alias default 22        # 或设为默认,一劳永逸
 
 ## 六、更新已部署的站点
 
-点一键部署按钮时,Cloudflare 会**克隆一份新仓库**(本仓库名被占用时会自动加后缀,例如 `mychat-deploy`),
-CI/CD 接的是那个克隆仓库。所以往本仓库推代码,**线上不会自动更新**。
+### 推荐:让 Worker 直接连本仓库(一次配置,以后 push 即部署)
 
-同步一下即可:
+**Cloudflare 控制台 → Workers & Pages → 你的 Worker → Settings → Builds → Git Repository → Manage**,
+选择本仓库。之后每次 `git push` 都会自动重新构建部署,不产生任何克隆仓库。
+
+新建 Worker 时也可以走这条路:**Workers & Pages → Create → Workers → Import a repository**。
+
+> 注意 `wrangler.jsonc` 里的 `name` 必须和目标 Worker 同名 —— 它决定部署到哪个 Worker,
+> 也决定访问网址。名字对不上会创建出一个全新的 Worker,密钥需要重填。
+
+### 说明:一键部署按钮会克隆仓库
+
+点 **Deploy to Cloudflare** 按钮部署时,Cloudflare 不是直接连接本仓库,而是**克隆一份新仓库**
+(本仓库名被占用时自动加后缀,如 `mychat-deploy`),CI/CD 接在克隆仓库上。
+这种情况下往本仓库推代码,线上不会更新。
+
+如果你已经是这个状态,用同步脚本把更新推过去:
 
 ```bash
 ./sync-deploy.sh                 # 默认目标 mychat-deploy
 ./sync-deploy.sh 你的部署仓库名    # 名字不同时手动指定
 ```
 
-脚本会把本仓库最新代码合并进部署仓库并推送,Cloudflare 随即自动重新构建部署。
+脚本以合并方式同步(不重写历史),并自动保留克隆仓库里被改写过的 Worker 名 ——
+直接覆盖会部署出一个全新 Worker,网址变了、密钥还得重填。
 
-> **它为什么不是简单的 `git push`:** Cloudflare 克隆时把 `wrangler.jsonc` 和 `package.json`
-> 里的 `name` 改成了新仓库名。这个 `name` 决定 Worker 的名字和访问网址,而你填的密钥是绑在那个
-> Worker 上的 —— 直接覆盖会部署出一个全新的 Worker,网址变了、密钥还得重填。脚本会自动保留它。
-
-如果你不想维护两个仓库,也可以在 **Cloudflare 控制台 → 你的 Worker → Settings → Build**
-里把连接的仓库改成本仓库,之后直接 `git push` 就会自动部署。
+长期建议还是改用上面的直连方式,单一仓库更清爽。
 
 ---
 

@@ -130,26 +130,33 @@ Below 820px the sidebar collapses; tap ☰ at the top-left to open it. History l
 
 ## 6. Updating a deployed site
 
-When you click the deploy button, Cloudflare **clones the repo into a new repository** (adding a suffix if the
-name is taken, e.g. `mychat-deploy`) and wires CI/CD to *that* clone. So pushing to this repo does **not**
-update your live site on its own.
+### Recommended: connect the Worker straight to this repo (set up once, then push to deploy)
 
-Sync it:
+Go to **Cloudflare dashboard → Workers & Pages → your Worker → Settings → Builds → Git Repository → Manage**
+and select this repository. From then on every `git push` triggers a rebuild and deploy, with no clone involved.
+
+You can also start this way for a new Worker: **Workers & Pages → Create → Workers → Import a repository**.
+
+> The `name` in `wrangler.jsonc` must match the target Worker — it decides which Worker you deploy to and
+> what the URL is. A mismatch creates a brand-new Worker, and you'd have to set the secrets again.
+
+### Note: the one-click button clones the repo
+
+When you deploy via the **Deploy to Cloudflare** button, Cloudflare doesn't connect to this repo directly —
+it **clones it into a new repository** (adding a suffix if the name is taken, e.g. `mychat-deploy`) and wires
+CI/CD to the clone. In that setup, pushing here does not update your live site.
+
+If that's your situation, sync the updates across:
 
 ```bash
 ./sync-deploy.sh                  # defaults to mychat-deploy
 ./sync-deploy.sh your-repo-name   # if your clone is named differently
 ```
 
-The script merges this repo's latest code into the deploy repo and pushes, which triggers an automatic rebuild.
+The script merges (it never rewrites history) and preserves the Worker name the clone was given — overwriting
+it blindly would deploy a brand-new Worker under a different URL with no secrets set.
 
-> **Why it isn't just a `git push`:** when Cloudflare cloned the repo it rewrote `name` in `wrangler.jsonc`
-> and `package.json` to the new repository's name. That `name` determines the Worker's identity and URL, and
-> your secrets are attached to that Worker — overwriting it blindly would deploy a brand-new Worker under a
-> different URL with no secrets set. The script preserves it for you.
-
-If you'd rather not maintain two repositories, go to **Cloudflare dashboard → your Worker → Settings → Build**
-and repoint the connected repository at this one. After that a plain `git push` deploys.
+Long term, the direct connection above is cleaner: one repository instead of two.
 
 ---
 
