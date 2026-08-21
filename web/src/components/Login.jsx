@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { IconAlert, IconLock } from "../icons";
 
 export function Login({ onSuccess }) {
   const [password, setPassword] = useState("");
@@ -38,17 +39,23 @@ export function Login({ onSuccess }) {
   return (
     <div className="login-view">
       <form className="login-card" onSubmit={submit}>
-        <h1>🔐 MyChat</h1>
-        <p>Private AI playground · enter your master password</p>
+        <div className="login-icon">
+          <IconLock size={22} />
+        </div>
+        <h1>MyChat</h1>
+        <p>Private AI playground — enter your master password</p>
 
         {missing.length > 0 && (
           <div className="setup-warn">
-            ⚠️ <b>Setup incomplete</b>
-            <br />
-            Missing secret(s): <b>{missing.join(", ")}</b>
-            <br />
-            Add them under Cloudflare dashboard → Workers &amp; Pages → mychat → Settings →
-            Variables and Secrets (choose type <b>Secret</b>), then redeploy.
+            <IconAlert size={15} />
+            <div>
+              <b>Setup incomplete</b>
+              <br />
+              Missing secret(s): <b>{missing.join(", ")}</b>
+              <br />
+              Add them under Cloudflare dashboard → Workers &amp; Pages → mychat → Settings →
+              Variables and Secrets (choose type <b>Secret</b>), then redeploy.
+            </div>
           </div>
         )}
 
@@ -60,7 +67,7 @@ export function Login({ onSuccess }) {
           autoComplete="current-password"
           autoFocus
         />
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="btn-primary" disabled={busy}>
           {busy ? "Signing in…" : "Enter"}
         </button>
         <div className="login-error">{error}</div>

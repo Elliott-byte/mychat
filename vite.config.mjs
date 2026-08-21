@@ -10,9 +10,15 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    // Used only by `npm run dev:ui` for hot reload: proxy /api to the local wrangler
+    // Used only by `npm run dev:ui` for hot reload: proxy /api to the local wrangler.
+    // The Origin header must be rewritten to match the wrangler origin, or the
+    // Worker's same-origin check rejects every state-changing request with 403.
     proxy: {
-      "/api": "http://127.0.0.1:8787",
+      "/api": {
+        target: "http://127.0.0.1:8787",
+        changeOrigin: true,
+        headers: { Origin: "http://127.0.0.1:8787" },
+      },
     },
   },
 });

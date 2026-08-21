@@ -25,7 +25,8 @@ A personal AI playground running on Cloudflare Workers' free tier, calling the l
 - **Models update themselves** — The model list is fetched live from OpenRouter and sorted newest-first, so new releases show up at the top without any code changes.
 - **ChatGPT-style interface** — Conversation history in a left sidebar, streaming output, stop generation, regenerate, one-click copy.
 - **History stored in the cloud** — Conversations live in Cloudflare D1 (also free), so switching devices shows you the same history.
-- **Images live in the chat** — paste, drop, or attach an image without switching screens. Models that read images are marked 👁, models that return them 🎨.
+- **Images live in the chat** — paste, drop, or attach an image without switching screens. Models that read images are marked 📷, models that return them 🎨.
+- **Built for a phone too** — responsive layout, a 📷 button that opens the camera straight away, a composer that stays above the software keyboard, and installable to the home screen.
 - **React frontend** — React 19 + Vite, component-based.
 - **Full Markdown** — headings, lists, tables, blockquotes, task lists; code blocks get syntax highlighting and a copy button.
 
@@ -123,9 +124,9 @@ nvm alias default 22        # or make it the default once and for all
 
 ### 💬 Chat
 - The left sidebar lists your conversation history — click any entry to resume it with full context
-- Titles come from your first message; hover to **rename (✎) or delete (🗑)**
+- Titles come from your first message; hover to **rename or delete** — renaming happens inline, and delete asks for a second click to confirm instead of popping a browser dialog
 - Streaming output (typewriter effect). While generating, the button becomes **■ stop**, so you can interrupt at any time
-- Hover any message to **copy** it; assistant messages also offer **↻ regenerate** (drops that reply and everything after it, then answers again)
+- Hover any message to **copy** it; assistant messages also offer **regenerate** (drops that reply and everything after it, then answers again)
 - **Full Markdown rendering**: headings, ordered/unordered lists, task lists, tables, blockquotes, rules, links, bold/italic/strikethrough
 - Code blocks get **syntax highlighting** (18 common languages built in, auto-detection for the rest), a language label, and a **copy** button
 - Links always open in a new tab; model output renders as React nodes rather than HTML, so pasted or model-returned markup cannot inject anything
@@ -142,7 +143,7 @@ Images work inside the conversation — there is no separate screen:
 - Images are resized in the browser to 1280px on the long edge and re-encoded as JPEG,
   usually taking a multi-megabyte photo down to 100-300 KB — cheaper in tokens, faster to
   upload, and small enough for D1 (2 MB per row)
-- In the model dropdown, **👁** means the model can read images and **🎨** means it can
+- In the model dropdown, **📷** means the model can read images and **🎨** means it can
   return them. Pick an image-capable model and its output appears inline; click to open full size
 - Attachments are saved with the conversation. If one is too large to store, only the stored
   copy degrades to a placeholder — what gets sent to the model is always complete
@@ -150,8 +151,22 @@ Images work inside the conversation — there is no separate screen:
 ### ⟳ Refresh models
 The model list is cached server-side for one hour and refreshes on its own. Click "⟳ refresh models" at the bottom-left to pull the latest immediately.
 
-### 📱 On mobile
-Below 820px the sidebar collapses; tap ☰ at the top-left to open it. History lives in the cloud, so your phone and laptop see the same conversations.
+### 📱 On a phone
+Laid out for a phone rather than shrunk to fit one:
+
+- **Photograph something and ask about it** — **📷** next to the composer opens the rear camera
+  directly; **📎** picks from the photo library. Either way the image is downscaled in the browser
+  before it is sent, so a 5 MB photo costs a couple of hundred KB
+- The sidebar collapses below 820px — tap **☰** to slide it out, tap outside to dismiss
+- The model picker gets the full width of the row; search and "free only" fold away behind **🔍**
+- Copy, regenerate, rename and delete are always visible — there is no hover to reveal them on a
+  touch screen
+- The composer stays above the software keyboard, and the reply you were reading stays in view
+  when the keyboard opens
+- Form text is 16px, so iOS never zooms the page in when you tap the input
+- Respects the notch and home indicator, and an over-scroll won't pull-to-refresh the page away
+- **Add to Home Screen** to run it full-screen with its own icon
+- History lives in the cloud, so your phone and laptop see the same conversations
 
 ---
 

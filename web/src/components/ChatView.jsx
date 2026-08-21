@@ -1,6 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Markdown } from "../markdown";
 import { imagesFromDataTransfer, isImageFile, prepareImage } from "../lib/image";
+import {
+  IconAlert,
+  IconArrowUp,
+  IconCamera,
+  IconCopy,
+  IconPaperclip,
+  IconRefresh,
+  IconSparkles,
+  IconStop,
+  IconX,
+} from "../icons";
 
 /** Split a message's content into its text and its images. */
 function partsOf(content) {
@@ -17,39 +28,54 @@ function partsOf(content) {
   return { text, images };
 }
 
+/** "anthropic/claude-sonnet-4.5" → "claude-sonnet-4.5"; the header shows the full id. */
+function shortModel(id) {
+  return id ? id.split("/").pop() : "AI";
+}
+
 function Message({ role, content, model, streaming, onCopy, onRegenerate, onImageLoad }) {
   const { text, images } = partsOf(content);
   return (
     <div className={"msg " + role}>
-      <div className="avatar">{role === "user" ? "🧑" : "🤖"}</div>
-      <div className="body">
-        <div className="who">{role === "user" ? "You" : model || "AI"}</div>
-
-        {images.length > 0 && (
-          <div className="msg-images">
-            {images.map((src, i) => (
-              <a key={i} href={src} target="_blank" rel="noopener noreferrer">
-                <img src={src} alt="" onLoad={onImageLoad} />
-              </a>
-            ))}
+      {role === "assistant" && (
+        <div className="msg-head">
+          <div className="avatar">
+            <IconSparkles size={14} />
           </div>
-        )}
-
-        {(text || streaming) && (
-          <div className={"bubble" + (streaming ? " cursor" : "")}>
-            <Markdown text={text} streaming={streaming} />
+          <div className="who" title={model}>
+            {shortModel(model)}
           </div>
-        )}
+        </div>
+      )}
 
-        {!streaming && (
-          <div className="msg-acts">
-            <button onClick={onCopy}>📋 Copy</button>
-            {role === "assistant" && onRegenerate && (
-              <button onClick={onRegenerate}>↻ Regenerate</button>
-            )}
-          </div>
-        )}
-      </div>
+      {images.length > 0 && (
+        <div className="msg-images">
+          {images.map((src, i) => (
+            <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+              <img src={src} alt="" onLoad={onImageLoad} />
+            </a>
+          ))}
+        </div>
+      )}
+
+      {(text || streaming) && (
+        <div className={"bubble" + (streaming ? " cursor" : "")}>
+          <Markdown text={text} streaming={streaming} />
+        </div>
+      )}
+
+      {!streaming && (
+        <div className="msg-acts">
+          <button className="ibtn" onClick={onCopy} title="Copy" aria-label="Copy">
+            <IconCopy size={14} />
+          </button>
+          {role === "assistant" && onRegenerate && (
+            <button className="ibtn" onClick={onRegenerate} title="Regenerate" aria-label="Regenerate">
+              <IconRefresh size={13} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -57,13 +83,15 @@ function Message({ role, content, model, streaming, onCopy, onRegenerate, onImag
 function ErrorBlock({ error, onRetry, onDismiss }) {
   return (
     <div className="chat-error">
-      <div className="chat-error-title">⚠️ Generation failed</div>
+      <div className="chat-error-title">
+        <IconAlert size={15} /> Generation failed
+      </div>
       <div className="chat-error-body">{error.message}</div>
       <div className="chat-error-acts">
         <button className="btn-primary" onClick={onRetry}>
           Retry
         </button>
-        <button className="small-btn" onClick={onDismiss}>
+        <button className="btn-ghost" onClick={onDismiss}>
           Dismiss
         </button>
       </div>
@@ -92,6 +120,7 @@ export function ChatView({
   const logRef = useRef(null);
   const taRef = useRef(null);
   const fileRef = useRef(null);
+  const cameraRef = useRef(null);
   const stickRef = useRef(true); // whether the user is pinned to the bottom
 
   // Only follow along when already at the bottom, so scrolling back to read
@@ -118,7 +147,24 @@ export function ChatView({
     if (!ta) return;
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+    // The scrollbar only exists once the 200px cap is hit; leaving overflow on
+    // all the time shows a phantom scrollbar track inside the empty composer.
+    ta.style.overflowY = ta.scrollHeight > 200 ? "auto" : "hidden";
   }, [input]);
+
+  // Opening the keyboard halves the log's height without changing any state, so
+  // nothing re-runs the pin-to-bottom effect and the reply you were reading
+  // slides up behind the composer. rAF, not the event itself: this listener runs
+  // before App's, which is what actually shrinks the app.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const repin = () => requestAnimationFrame(scrollIfStuck);
+    vv.addEventListener("resize", repin);
+    return () => vv.removeEventListener("resize", repin);
+    // scrollIfStuck only touches refs, so the first binding stays correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // #20: dropping a file anywhere outside the drop zone would otherwise make the
   // browser navigate to it, losing an unsent conversation.
@@ -136,7 +182,7 @@ export function ChatView({
     const list = [...files].filter(isImageFile);
     if (!list.length) return;
     if (!supportsVision) {
-      onToast("This model cannot read images — pick one marked 👁");
+      onToast("This model cannot read images — pick one marked 📷");
       return;
     }
     setPreparing((n) => n + list.length);
@@ -183,6 +229,9 @@ export function ChatView({
   }
 
   const empty = messages.length === 0 && !streamingText && !error;
+  // The button stays live while busy (it is the Stop button) and while an image
+  // is still being prepared (pressing it explains what's holding the send up).
+  const canSubmit = busy || preparing > 0 || Boolean(input.trim()) || attached.length > 0;
 
   return (
     <div
@@ -201,13 +250,16 @@ export function ChatView({
         <div className="inner">
           {empty ? (
             <div className="empty-state">
+              <div className="empty-icon">
+                <IconSparkles size={26} />
+              </div>
               <h2>MyChat</h2>
-              <p>
-                Pick a model and start chatting.
-                <br />
-                Paste or drop an image to send it along — models marked 👁 can read
-                images, and 🎨 can return them.
-              </p>
+              <p>Pick a model above and start chatting.</p>
+              <div className="empty-caps">
+                <span>🆓 free</span>
+                <span>📷 reads images</span>
+                <span>🎨 returns images</span>
+              </div>
             </div>
           ) : (
             <>
@@ -245,18 +297,17 @@ export function ChatView({
                 <button
                   className="attachment-x"
                   title="Remove"
+                  aria-label="Remove image"
                   onClick={() => setAttached((list) => list.filter((_, k) => k !== i))}
                 >
-                  ✕
+                  <IconX size={11} />
                 </button>
                 <span className="attachment-size">{Math.round(a.bytes / 1024)} KB</span>
               </div>
             ))}
             {preparing > 0 &&
               Array.from({ length: preparing }, (_, i) => (
-                <div className="attachment preparing" key={"p" + i}>
-                  <span>…</span>
-                </div>
+                <div className="attachment preparing" key={"p" + i} aria-label="Preparing image" />
               ))}
           </div>
         )}
@@ -265,16 +316,40 @@ export function ChatView({
           <button
             className="attach-btn"
             title={supportsVision ? "Attach an image" : "This model cannot read images"}
+            aria-label="Attach an image"
             onClick={() => fileRef.current?.click()}
             disabled={!supportsVision}
           >
-            📎
+            <IconPaperclip size={17} />
           </button>
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
             multiple
+            hidden
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          {/* `capture` opens the rear camera straight away instead of the
+              photo-library sheet — the fast path for "what does this say?".
+              The button is hidden unless the pointer is a fingertip. */}
+          <button
+            className="camera-btn"
+            title={supportsVision ? "Take a photo" : "This model cannot read images"}
+            aria-label="Take a photo"
+            onClick={() => cameraRef.current?.click()}
+            disabled={!supportsVision}
+          >
+            <IconCamera size={18} />
+          </button>
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             hidden
             onChange={(e) => {
               addFiles(e.target.files);
@@ -296,21 +371,21 @@ export function ChatView({
                 submit();
               }
             }}
-            placeholder={
-              supportsVision ? "Message the model, or paste an image…" : "Message the model…"
-            }
+            placeholder="Message the model…"
+            aria-label="Message"
           />
           <button
             className={"icon-btn" + (busy ? " stop" : "")}
             onClick={submit}
+            disabled={!canSubmit}
             title={busy ? "Stop generating" : "Send"}
+            aria-label={busy ? "Stop generating" : "Send"}
           >
-            {busy ? "■" : "↑"}
+            {busy ? <IconStop size={16} /> : <IconArrowUp size={17} />}
           </button>
         </div>
         <div className="hint">
-          Enter to send · Shift+Enter for a new line · paste or drop images · history saves
-          automatically
+          Enter to send · Shift+Enter for a new line · paste or drop images to attach them
         </div>
       </div>
 

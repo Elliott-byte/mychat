@@ -142,7 +142,7 @@ console.log("\n=== Case B: signed in ===");
   check("composer has an attach button", !!doc.querySelector(".attach-btn"));
   check("image tab is gone", !doc.querySelector(".mode-tabs"));
   check("free models are marked 🆓", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("🆓")));
-  check("vision models are marked 👁", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("👁")));
+  check("vision models are marked 📷", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("📷")));
   check("image-output models are marked 🎨", [...doc.querySelectorAll("option")].some((o) => o.textContent.includes("🎨")));
   check("info bar shows pricing", doc.querySelector(".model-info")?.textContent.includes("$"));
   check("shows the empty state", !!doc.querySelector(".empty-state"));

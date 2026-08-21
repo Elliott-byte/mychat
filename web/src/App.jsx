@@ -16,6 +16,47 @@ function loadPrefs() {
   }
 }
 
+/**
+ * Keep the app exactly as tall as the browser is actually showing.
+ *
+ * `100dvh` already handles a collapsing URL bar, but it knows nothing about the
+ * software keyboard: on iOS the layout viewport keeps its full height and the
+ * keyboard is simply drawn on top, so the composer ends up underneath it. Only
+ * visualViewport reports the height that is genuinely visible.
+ *
+ * Deliberately touch-only — on a desktop the same event fires on pinch-zoom,
+ * where shrinking the app to the zoomed region is exactly the wrong response.
+ */
+function useViewportHeight() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv || !window.matchMedia("(pointer: coarse)").matches) return;
+    const root = document.documentElement;
+
+    const apply = () => {
+      root.style.setProperty("--app-h", vv.height + "px");
+      root.classList.add("vv-h");
+      // A shortfall this big is the keyboard, not the URL bar sliding away.
+      document.body.classList.toggle("kb-open", window.innerHeight - vv.height > 120);
+      // iOS scrolls the *layout* viewport to reveal a focused field. Since the
+      // app is already sized to fit, that shove only pushes the header off the
+      // top of the screen; undo it.
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+      root.classList.remove("vv-h");
+      root.style.removeProperty("--app-h");
+      document.body.classList.remove("kb-open");
+    };
+  }, []);
+}
+
 export default function App() {
   // useRef(loadPrefs()) would re-read localStorage on every render and throw the
   // result away; read it once instead.
@@ -53,6 +94,8 @@ export default function App() {
   }, []);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  useViewportHeight();
 
   /* ---------- Startup: determine session state ---------- */
   useEffect(() => {
@@ -101,7 +144,7 @@ export default function App() {
 
   /* ---------- Model filtering ---------- */
   // One list for everything: a model is usable if it outputs text or images.
-  // Capability badges (👁 reads images, 🎨 returns them) replace the old tabs.
+  // Capability badges (📷 reads images, 🎨 returns them) replace the old tabs.
   const visibleModels = useMemo(() => {
     const byId = new Map();
     for (const m of [...(allModels.chat || []), ...(allModels.image || [])]) {
@@ -162,13 +205,13 @@ export default function App() {
     }
   }
 
-  async function renameConv(c) {
-    const title = prompt("Rename conversation:", c.title);
-    if (title === null || !title.trim()) return;
+  // Confirmation for destructive actions happens inline in the sidebar
+  // (tap to arm, tap again to commit) — no window.confirm/prompt dialogs.
+  async function renameConv(c, title) {
     try {
       await api.renameConversation(c.id, title);
       setConversations((list) =>
-        list.map((x) => (x.id === c.id ? { ...x, title: title.trim() } : x))
+        list.map((x) => (x.id === c.id ? { ...x, title } : x))
       );
     } catch (err) {
       showToast(err.message);
@@ -177,7 +220,6 @@ export default function App() {
 
   async function deleteConv(c) {
     if (busy) return showToast("Stop the current generation first");
-    if (!confirm(`Delete "${c.title}"? This cannot be undone.`)) return;
     try {
       await api.deleteConversation(c.id);
       setConversations((list) => list.filter((x) => x.id !== c.id));
@@ -190,7 +232,6 @@ export default function App() {
 
   async function clearAll() {
     if (busy) return showToast("Stop the current generation first");
-    if (!confirm(`Delete all ${conversations.length} conversations? This cannot be undone.`)) return;
     try {
       await api.clearConversations();
       setConversations([]);
