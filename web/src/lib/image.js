@@ -15,8 +15,12 @@ export function dataUrlBytes(url) {
   return Math.round(((url.length - comma - 1) * 3) / 4);
 }
 
+// Some Android cameras hand back a file with an empty MIME type, so fall back
+// to the extension rather than silently refusing the photo.
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif|svg)$/i;
 export function isImageFile(file) {
-  return file && file.type.startsWith("image/");
+  if (!file) return false;
+  return file.type ? file.type.startsWith("image/") : IMAGE_EXT.test(file.name || "");
 }
 
 function readAsDataURL(file) {
@@ -37,34 +41,53 @@ function loadImage(src) {
   });
 }
 
+/**
+ * Decode straight from the File via an object URL.
+ *
+ * Going through readAsDataURL first would materialise an 8 MB phone photo as an
+ * ~11 MB base64 string on top of the decoded bitmap — enough to get the tab
+ * killed on a mid-range phone, and all of it thrown away a moment later.
+ */
+async function decode(file) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    return await loadImage(objectUrl);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 /** Returns { url, name, bytes } with the image scaled down and re-encoded. */
 export async function prepareImage(file) {
-  const original = await readAsDataURL(file);
-
   const tooBig = () =>
     new Error(`"${file.name}" is too large to attach — try a smaller image.`);
 
+  // Pass the file through untouched, if it fits. The only route to a data URL
+  // that isn't a re-encode, so it stays lazy: the common path never builds one.
+  const passThrough = async () => {
+    const original = await readAsDataURL(file);
+    const bytes = dataUrlBytes(original);
+    if (bytes > MAX_BYTES) throw tooBig();
+    return { url: original, name: file.name, bytes };
+  };
+
   // SVG has no pixel size to scale and canvas would rasterise it, so it can only
   // be passed through — which means the size limit has to be enforced here.
-  if (file.type === "image/svg+xml") {
-    if (dataUrlBytes(original) > MAX_BYTES) throw tooBig();
-    return { url: original, name: file.name, bytes: dataUrlBytes(original) };
-  }
+  if (file.type === "image/svg+xml") return passThrough();
 
   let img;
   try {
-    img = await loadImage(original);
+    img = await decode(file);
   } catch {
     // Undecodable in this browser (HEIC on desktop Chrome, for instance). We
     // cannot resize it, so it only goes through if it is already small enough.
-    if (dataUrlBytes(original) > MAX_BYTES) throw tooBig();
-    return { url: original, name: file.name, bytes: dataUrlBytes(original) };
+    return passThrough();
   }
 
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   let edge = MAX_EDGE;
-  let url = original;
+  let url = "";
 
   // Step the quality down first, then the dimensions. Reducing quality alone is
   // not enough for dense images (detailed scans, full-page screenshots), which
@@ -82,11 +105,14 @@ export async function prepareImage(file) {
     if (attempt >= 2) edge = Math.round(edge * 0.75); // shrink once quality stops helping
   }
 
-  if (dataUrlBytes(url) > MAX_BYTES) throw tooBig();
+  const bytes = dataUrlBytes(url);
+  if (bytes > MAX_BYTES) throw tooBig();
   // If re-encoding made it bigger (small PNGs can do this), keep the original.
-  if (url.length > original.length && dataUrlBytes(original) <= MAX_BYTES) url = original;
+  // file.size is the same measure as dataUrlBytes — decoded payload bytes — so
+  // they compare directly, without reading the original just to find out.
+  if (bytes > file.size && file.size <= MAX_BYTES) return passThrough();
 
-  return { url, name: file.name, bytes: dataUrlBytes(url) };
+  return { url, name: file.name, bytes };
 }
 
 /** Pull image files out of a paste or drop event. */
