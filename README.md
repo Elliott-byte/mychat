@@ -131,6 +131,7 @@ nvm alias default 22        # or make it the default once and for all
 - Code blocks get **syntax highlighting** (18 common languages built in, auto-detection for the rest), a language label, and a **copy** button
 - Links always open in a new tab; model output renders as React nodes rather than HTML, so pasted or model-returned markup cannot inject anything
 - The model dropdown is **sorted by release date**, newest first; searchable, with a "free only" filter
+- **Light and dark themes** — the sun/moon button in the header switches; the first visit follows your OS setting, after that your choice is remembered
 - The info bar shows model ID, release date, context length, and price per million tokens
 - Switching models does **not** clear the current conversation, so you can put the same question to different models back to back
 - The input box grows with your text, and scrolling up to read won't yank you back to the bottom

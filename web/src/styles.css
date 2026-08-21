@@ -31,9 +31,12 @@
   --danger: #f87171;
   --danger-soft: rgba(248, 113, 113, 0.12);
   --danger-text: #fca5a5;
+  --danger-strong: #fecaca;
 
   --code-bg: #0b0d13;
   --code-head: #14171f;
+  --code-text: #d6deeb;
+  --row-alt: rgba(255, 255, 255, 0.02);
 
   /* Shape scale: chips 8, controls and rows 12, cards and composer 16 */
   --r-sm: 8px;
@@ -51,6 +54,45 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+}
+
+/* ---------- Light theme ----------
+   Only colour tokens change; shape and rhythm are shared. /theme-init.js sets
+   data-theme before first paint (saved choice, else the OS preference), and
+   App.jsx keeps it in sync with the header toggle. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f5f6fa;
+  --sidebar-bg: #eef0f6;
+  --panel: #ffffff;
+  --panel-2: #e9ecf5;
+  --hover: #e0e4f0;
+  --active: #d7dcec;
+
+  --border: #d9dde8;
+  --border-strong: #c2c8da;
+
+  --text: #1d2333;
+  --text-bright: #0a0d16;
+  --muted: #6b7286;
+
+  --accent: #4c66e0;
+  --accent-hover: #3b53cd;
+  --accent-soft: rgba(76, 102, 224, 0.1);
+  --accent-text: #3b4fc0;
+
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --danger-text: #b91c1c;
+  --danger-strong: #7f1d1d;
+
+  --code-bg: #f6f8fb;
+  --code-head: #eceff5;
+  --code-text: #24292f;
+  --row-alt: rgba(0, 0, 0, 0.025);
+
+  --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.18);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -159,7 +201,7 @@ input:focus, textarea:focus, select:focus { outline: none; }
   color: var(--danger-text);
 }
 .setup-warn svg { flex-shrink: 0; margin-top: 2px; }
-.setup-warn b { color: #fecaca; }
+.setup-warn b { color: var(--danger-strong); }
 
 /* ---------- Layout ---------- */
 .app { height: 100%; display: flex; }
@@ -226,11 +268,12 @@ header {
   padding: calc(10px + var(--safe-t)) calc(16px + var(--safe-r)) 10px calc(16px + var(--safe-l));
   border-bottom: 1px solid var(--border); background: var(--panel);
 }
-.menu-btn, .filter-btn {
+.menu-btn, .filter-btn, .theme-btn {
   display: none; align-items: center; justify-content: center; flex-shrink: 0;
   width: var(--ctl-h); height: var(--ctl-h); border-radius: var(--r-sm); color: var(--muted);
 }
-.menu-btn:hover, .filter-btn:hover { background: var(--hover); color: var(--text); }
+.menu-btn:hover, .filter-btn:hover, .theme-btn:hover { background: var(--hover); color: var(--text); }
+.theme-btn { display: flex; order: 5; margin-left: auto; }
 .filter-btn.on { background: var(--accent-soft); color: var(--accent); }
 /* On a wide screen the filters just sit in the header row; on a phone the
    wrapper becomes a real row that the search button folds away. */
@@ -244,6 +287,9 @@ select {
   background-repeat: no-repeat; background-position: right 9px center;
 }
 select:hover { border-color: var(--border-strong); }
+:root[data-theme="light"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7286' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
 select:focus { border-color: var(--accent); }
 .model-search {
   height: var(--ctl-h); background: var(--panel-2); border: 1px solid var(--border);
@@ -258,7 +304,9 @@ select:focus { border-color: var(--accent); }
 .chk:hover { color: var(--text); }
 .chk input { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
 .model-info {
-  width: 100%; font-size: 12px; color: var(--muted);
+  /* Explicit order keeps this meta row after the theme toggle (order 5), which
+     otherwise sorts behind it and drops onto a row of its own. */
+  order: 10; width: 100%; font-size: 12px; color: var(--muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mi-cap {
@@ -401,9 +449,9 @@ body.kb-open .input-wrap { padding-bottom: 10px; }
 .drop-overlay {
   position: absolute; inset: 12px; z-index: 20; pointer-events: none;
   border: 2px dashed var(--accent); border-radius: var(--r-lg);
-  background: rgba(108, 140, 255, 0.1); backdrop-filter: blur(1px);
+  background: var(--accent-soft); backdrop-filter: blur(1px);
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; font-weight: 600; color: #c7d3ff;
+  font-size: 16px; font-weight: 600; color: var(--accent-text);
 }
 
 /* ---------- Toast ---------- */
@@ -427,7 +475,7 @@ body.kb-open .input-wrap { padding-bottom: 10px; }
   color: var(--danger-text); font-size: 14px; font-weight: 600; margin-bottom: 8px;
 }
 .chat-error-body {
-  color: #fecaca; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+  color: var(--danger-strong); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
 }
 .chat-error-acts { display: flex; gap: 8px; margin-top: 14px; }
 .chat-error-acts .btn-ghost:hover { background: none; border-color: var(--danger); color: var(--danger-text); }
@@ -469,7 +517,7 @@ body.kb-open .input-wrap { padding-bottom: 10px; }
 .md table { border-collapse: collapse; font-size: 13px; width: 100%; }
 .md th, .md td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
 .md th { background: var(--panel-2); font-weight: 600; }
-.md tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+.md tbody tr:nth-child(even) { background: var(--row-alt); }
 
 /* Code blocks */
 .code-block {
@@ -489,7 +537,7 @@ body.kb-open .input-wrap { padding-bottom: 10px; }
 }
 .code-block pre code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  background: none; padding: 0; color: #d6deeb;
+  background: none; padding: 0; color: var(--code-text);
 }
 
 /* Syntax highlighting palette (highlight.js class names, dark theme) */
@@ -504,6 +552,23 @@ body.kb-open .input-wrap { padding-bottom: 10px; }
 .hljs-deletion { color: #ff6b6b; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
+
+/* Light-theme syntax palette — the dark colours above vanish on a light
+   code background */
+:root[data-theme="light"] .hljs-comment, :root[data-theme="light"] .hljs-quote { color: #8a919f; }
+:root[data-theme="light"] .hljs-keyword, :root[data-theme="light"] .hljs-selector-tag,
+:root[data-theme="light"] .hljs-literal, :root[data-theme="light"] .hljs-type { color: #a626a4; }
+:root[data-theme="light"] .hljs-string, :root[data-theme="light"] .hljs-regexp,
+:root[data-theme="light"] .hljs-addition { color: #50a14f; }
+:root[data-theme="light"] .hljs-number, :root[data-theme="light"] .hljs-symbol,
+:root[data-theme="light"] .hljs-bullet { color: #986801; }
+:root[data-theme="light"] .hljs-title, :root[data-theme="light"] .hljs-section,
+:root[data-theme="light"] .hljs-name, :root[data-theme="light"] .hljs-selector-id { color: #4078f2; }
+:root[data-theme="light"] .hljs-attr, :root[data-theme="light"] .hljs-attribute,
+:root[data-theme="light"] .hljs-variable, :root[data-theme="light"] .hljs-template-variable { color: #b76b01; }
+:root[data-theme="light"] .hljs-built_in, :root[data-theme="light"] .hljs-class .hljs-title { color: #0184bc; }
+:root[data-theme="light"] .hljs-meta, :root[data-theme="light"] .hljs-tag { color: #0184bc; }
+:root[data-theme="light"] .hljs-deletion { color: #ca1243; }
 
 /* ==========================================================================
    Mobile and touch
@@ -538,6 +603,7 @@ body.kb-open .input-wrap { padding-bottom: 10px; }
     z-index: 5; animation: fade-in 0.2s ease;
   }
   .menu-btn, .filter-btn { display: flex; }
+  .theme-btn { order: 0; margin-left: 0; }
 
   header {
     column-gap: 8px; row-gap: 6px;

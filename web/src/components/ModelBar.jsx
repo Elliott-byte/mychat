@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IconMenu, IconSearch } from "../icons";
+import { IconMenu, IconMoon, IconSearch, IconSun } from "../icons";
 
 export function isFree(m) {
   return (
@@ -36,6 +36,8 @@ export function ModelBar({
   onFreeOnly,
   onMenu,
   status,
+  theme,
+  onToggleTheme,
 }) {
   // On a phone the search box and the "free only" toggle would leave the picker
   // itself about 150px wide, so they fold away behind the search button until
@@ -71,6 +73,17 @@ export function ModelBar({
         title="Filter models"
       >
         <IconSearch size={17} />
+      </button>
+
+      {/* Kept before .model-filters in the DOM: on a phone that wrapper is a
+          full-width second row, and anything after it would wrap below it. */}
+      <button
+        className="theme-btn"
+        onClick={onToggleTheme}
+        aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      >
+        {theme === "dark" ? <IconSun size={17} /> : <IconMoon size={16} />}
       </button>
 
       <div className={"model-filters" + (filtersOpen ? " open" : "")}>

@@ -239,5 +239,24 @@ console.log("\n=== Case G: a stale remembered model falls back cleanly ===");
   check("no runtime errors", errors.length === 0, errors.join(" | "));
 }
 
+console.log("\n=== Case H: theme toggle ===");
+{
+  // theme-init.js does not run under jsdom (external script, outside-only), so
+  // the app must fall back to dark on its own, then flip and persist on click.
+  const { doc, window, errors, settle } = await render({ authed: true });
+  const btn = doc.querySelector(".theme-btn");
+  check("has a theme toggle", !!btn);
+  check("defaults to dark without a saved choice", doc.documentElement.dataset.theme === "dark",
+    `got ${doc.documentElement.dataset.theme}`);
+  btn?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  await settle(8);
+  check("toggle switches to light", doc.documentElement.dataset.theme === "light",
+    `got ${doc.documentElement.dataset.theme}`);
+  const prefs = JSON.parse(window.localStorage.getItem("mychat.prefs") || "{}");
+  check("theme choice is persisted", prefs.theme === "light", `got ${prefs.theme}`);
+  check("browser chrome colour follows", doc.querySelector('meta[name="theme-color"]')?.content === "#f5f6fa");
+  check("no runtime errors", errors.length === 0, errors.join(" | "));
+}
+
 console.log(failures === 0 ? "\n🎉 All checks passed" : `\n💥 ${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

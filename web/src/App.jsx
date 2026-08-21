@@ -66,6 +66,19 @@ export default function App() {
   const [authed, setAuthed] = useState(null); // null = not determined yet
   const [historyEnabled, setHistoryEnabled] = useState(false);
 
+  // /theme-init.js already resolved the theme (saved choice, else the OS
+  // preference) and stamped it on <html> before first paint; adopt that value
+  // rather than deciding again here.
+  const [theme, setTheme] = useState(() =>
+    document.documentElement.dataset.theme === "light" ? "light" : "dark"
+  );
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    // Keep the browser chrome (PWA title bar, mobile status bar) in step
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === "light" ? "#f5f6fa" : "#0f1117";
+  }, [theme]);
+
   const [allModels, setAllModels] = useState({ chat: [], image: [] });
   const [modelStatus, setModelStatus] = useState("");
   const [model, setModel] = useState(prefs.model || "");
@@ -176,11 +189,11 @@ export default function App() {
   // Persist the choices worth keeping across reloads
   useEffect(() => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ model, freeOnly }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ model, freeOnly, theme }));
     } catch {
       /* private mode or a full quota — not worth surfacing */
     }
-  }, [model, freeOnly]);
+  }, [model, freeOnly, theme]);
 
   /* ---------- Conversation actions ---------- */
   function newChat() {
@@ -384,6 +397,8 @@ export default function App() {
           onFreeOnly={setFreeOnly}
           onMenu={() => setSidebarOpen((v) => !v)}
           status={modelStatus}
+          theme={theme}
+          onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
         />
         <ChatView
           messages={messages}
